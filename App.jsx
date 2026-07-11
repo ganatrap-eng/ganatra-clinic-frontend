@@ -199,12 +199,26 @@ const mapSettings = (r) => ({ clinicName: r.clinic_name || "Ganatra Clinic", pro
 
 /* -------- Image capture: upload, rotate to align, attach via API -------- */
 function ImageCapture({ value, onChange }) {
-  const { call, origin } = useApi();
+  const { call, origin, token } = useApi();
   const [raw, setRaw] = useState(null);
   const [rotation, setRotation] = useState(0);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const [displayUrl, setDisplayUrl] = useState(null);
   const inputRef = useRef();
+
+  useEffect(() => {
+    let objectUrl;
+    if (value && !raw) {
+      fetch(`${origin}${value}`, { headers: { Authorization: `Bearer ${token}` } })
+        .then((r) => (r.ok ? r.blob() : Promise.reject(new Error("Could not load image"))))
+        .then((blob) => { objectUrl = URL.createObjectURL(blob); setDisplayUrl(objectUrl); })
+        .catch(() => setDisplayUrl(null));
+    } else {
+      setDisplayUrl(null);
+    }
+    return () => { if (objectUrl) URL.revokeObjectURL(objectUrl); };
+  }, [value, raw, origin, token]);
 
   const onFile = (e) => {
     const f = e.target.files[0]; if (!f) return;
@@ -246,7 +260,7 @@ function ImageCapture({ value, onChange }) {
   if (value && !raw) {
     return (
       <div className="imgcap">
-        <img src={`${origin}${value}`} alt="attached stationery" className="imgcap-thumb" />
+        {displayUrl ? <img src={displayUrl} alt="attached stationery" className="imgcap-thumb" /> : <div className="empty">Loading photo…</div>}
         <button className="btn secondary small" type="button" onClick={() => onChange(null)}>Remove image</button>
       </div>
     );
