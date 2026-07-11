@@ -389,44 +389,6 @@ function AuthScreen({ onLogin, origin, setOrigin }) {
     setBusy(false);
   };
 
-  const demo = async () => {
-    if (!origin.trim()) { setError("Enter your API server URL first."); return; }
-    setError(""); setBusy(true);
-    try {
-      let data;
-      try {
-        data = await localCall("/auth/register", { method: "POST", body: { userId: "demo", password: "Demo@1234", name: "Front Desk" } });
-      } catch {
-        data = await localCall("/auth/login", { method: "POST", body: { userId: "demo", password: "Demo@1234" } });
-      }
-      const token = data.token;
-      const call2 = (p, o) => apiFetch(origin, token, p, o);
-      const existingDoctors = await call2("/doctors");
-      let doctors = existingDoctors;
-      if (existingDoctors.length === 0) {
-        const d1 = await call2("/doctors", { method: "POST", body: { name: "Dr. Bhavisha Pratik Ganatra", shift: "Morning", payType: "Monthly", rate: 60000 } });
-        const d2 = await call2("/doctors", { method: "POST", body: { name: "Dr. Kunal Shah", shift: "Evening", payType: "Daily", rate: 1500 } });
-        doctors = [d1, d2];
-        const t = todayISO();
-        const c1 = await call2("/cases", { method: "POST", body: { date: t, patientName: "Ramesh Patel", phone: "9825012345", briefHistory: "Fever, body ache — 3 days", doctorId: d1.id, shift: "Morning", externalPrescription: "Azithromycin 500 (from medical store)", medicines: [{ name: "Paracetamol 650", qty: 10, price: 2 }] } });
-        const c2 = await call2("/cases", { method: "POST", body: { date: t, patientName: "Sunita Mehta", phone: "9825098765", briefHistory: "Routine antenatal checkup", doctorId: d2.id, shift: "Evening", medicines: [{ name: "Folic Acid", qty: 30, price: 1.5 }] } });
-        await call2("/collections", { method: "POST", body: { caseId: c1.id, caseNo: c1.case_no, patientName: "Ramesh Patel", phone: "9825012345", date: t, amountDue: 500, amountCollected: 500, mode: "Cash" } });
-        await call2("/collections", { method: "POST", body: { caseId: c2.id, caseNo: c2.case_no, patientName: "Sunita Mehta", phone: "9825098765", date: t, amountDue: 800, amountCollected: 500, mode: "UPI" } });
-        await call2("/doctor-pays", { method: "POST", body: { doctorId: d2.id, date: t, amount: 1500 } });
-        await call2("/referrals", { method: "POST", body: { date: t, patientName: "Ramesh Patel", referralType: "Lab Test", referredTo: "City Diagnostics", amount: 200, notes: "CBC + LFT" } });
-        await call2("/gifts", { method: "POST", body: { date: t, repName: "Anil Kapoor", company: "MedLife Pharma", gift: "Diary set", doctorId: d1.id } });
-        await call2("/expenses", { method: "POST", body: { date: t, category: "Rent", amount: 25000, narration: "Monthly clinic rent" } });
-        await call2("/expenses", { method: "POST", body: { date: t, category: "Electricity / Light Bill", amount: 3200, narration: "Light bill" } });
-        await call2("/expenses", { method: "POST", body: { date: t, category: "Nursing Staff Salary", amount: 15000, narration: "Nursing staff salary" } });
-        await call2("/assets", { method: "POST", body: { name: "Digital BP monitor & diagnostic set", block: "Medical & Diagnostic Equipment (Plant & Machinery)", rate: 15, purchaseDate: fyRange(fyOf(t)).start, cost: 65000 } });
-        await call2("/assets", { method: "POST", body: { name: "Reception computer & billing software", block: "Computers, Billing Software & Peripherals", rate: 40, purchaseDate: fyRange(fyOf(t)).start, cost: 55000 } });
-        await call2("/capital", { method: "POST", body: { date: fyRange(fyOf(t)).start, type: "Introduced", amount: 300000, note: "Opening capital" } });
-      }
-      await storeSet("clinic:apiOrigin", origin);
-      onLogin({ token, userId: data.user.userId, name: data.user.name, role: data.user.role, permissions: data.user.permissions });
-    } catch (e) { setError(e.message); }
-    setBusy(false);
-  };
 
   return (
     <div className="auth-wrap">
@@ -454,7 +416,6 @@ function AuthScreen({ onLogin, origin, setOrigin }) {
         .dev-code{font-family:'IBM Plex Mono',monospace;font-size:22px;letter-spacing:4px;text-align:center;background:#F3E3A8;color:#5b4a06;padding:10px;border-radius:8px;margin-bottom:14px;}
         .submit-btn{width:100%;background:#C9A227;color:#2A2103;font-weight:700;border:none;padding:12px;border-radius:8px;font-size:14.5px;cursor:pointer;box-shadow:0 4px 0 #96791b;}
         .submit-btn:active{transform:translateY(2px);box-shadow:0 2px 0 #96791b;}
-        .demo-link{display:block;width:100%;text-align:center;margin-top:14px;font-size:12.5px;color:#5B6B69;text-decoration:underline;background:none;border:none;cursor:pointer;}
         .note{font-size:11px;color:#8a9a97;margin-top:12px;line-height:1.6;text-align:center;}
         .api-field{background:#F5F8F7;border:1px dashed #C9A227;border-radius:8px;padding:10px 12px;margin-bottom:16px;}
         .api-field label{display:block;font-size:10.5px;text-transform:uppercase;letter-spacing:1px;color:#8a6d0a;font-weight:700;margin-bottom:5px;}
@@ -508,7 +469,6 @@ function AuthScreen({ onLogin, origin, setOrigin }) {
                   <button className="back-link" type="button" onClick={() => { setStage("useridRequest"); setError(""); setInfo(""); setFuRevealedUserId(""); }}>Forgot your User ID?</button>
                 </div>
               )}
-              <button className="demo-link" onClick={demo} type="button" disabled={busy}>Skip — seed &amp; explore sample clinic data (user: demo)</button>
               <div className="note">Real staff accounts need admin approval before they can log in. Same user ID and password work on web and mobile — both talk to the same API server.</div>
             </>
           )}
