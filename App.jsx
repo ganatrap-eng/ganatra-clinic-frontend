@@ -110,6 +110,13 @@ function exportExcel(filename, sheetsObj) {
   });
   XLSX.writeFile(wb, `${filename}.xlsx`);
 }
+/** Escapes text before it's inserted into a print view's innerHTML — without
+ *  this, a patient name or note containing "<" or "&" could be interpreted
+ *  as HTML/script rather than displayed as plain text. */
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+}
+
 function ExportRow({ onExcel }) {
   return (
     <div className="export-row no-print">
@@ -147,12 +154,12 @@ function CustomExport({ rows, dateField, buildSheets, filenameBase, printTitle, 
     const rangeLabel = from || to ? `${from || "start"} to ${to || "today"}` : "all dates";
     const win = document.getElementById("print-root");
     if (!win) { window.print(); return; }
-    const rowsHtml = data.map((r) => `<tr>${printColumns.map((c) => `<td>${c.value(r) ?? ""}</td>`).join("")}</tr>`).join("");
+    const rowsHtml = data.map((r) => `<tr>${printColumns.map((c) => `<td>${escapeHtml(c.value(r))}</td>`).join("")}</tr>`).join("");
     win.innerHTML = `
-      <h2>${printTitle}</h2>
-      <p style="color:#5B6B69;font-size:12px;">Range: ${rangeLabel} — ${data.length} record(s)</p>
+      <h2>${escapeHtml(printTitle)}</h2>
+      <p style="color:#5B6B69;font-size:12px;">Range: ${escapeHtml(rangeLabel)} — ${data.length} record(s)</p>
       <table style="width:100%;border-collapse:collapse;font-size:12px;">
-        <thead><tr>${printColumns.map((c) => `<th style="text-align:left;border-bottom:2px solid #C9A227;padding:5px 6px;">${c.label}</th>`).join("")}</tr></thead>
+        <thead><tr>${printColumns.map((c) => `<th style="text-align:left;border-bottom:2px solid #C9A227;padding:5px 6px;">${escapeHtml(c.label)}</th>`).join("")}</tr></thead>
         <tbody>${rowsHtml}</tbody>
       </table>`;
     document.body.classList.add("printing-custom");
@@ -589,6 +596,8 @@ export default function App() {
   const [expenses, setExpenses] = useState([]);
   const [assets, setAssets] = useState([]);
   const [capital, setCapital] = useState([]);
+  const [loans, setLoans] = useState([]);
+  const [deposits, setDeposits] = useState([]);
 
   useEffect(() => { storeGet("clinic:apiOrigin").then((o) => { if (o) setOrigin(o); }); }, []);
 
@@ -603,16 +612,19 @@ export default function App() {
       try { return await call(path); } catch { return []; }
     };
     try {
-      const [s, d, c, col, dp, ref, g, exp, ast, cap] = await Promise.all([
+      const [s, d, c, col, dp, ref, g, exp, ast, cap, other] = await Promise.all([
         call("/settings").catch(() => ({})),
         safeCall("/doctors", "doctorPay"), safeCall("/cases", "cases"), safeCall("/collections", "collections"),
         safeCall("/doctor-pays", "doctorPay"), safeCall("/referrals", "referrals"), safeCall("/gifts", "gifts"), safeCall("/expenses", "expenses"),
-        safeCall("/assets", "assets"), safeCall("/capital", "statements"),
+        safeCall("/assets", "assets"), safeCall("/capital", "statements"), safeCall("/other-balance", "statements"),
       ]);
       setSettings(mapSettings(s || {})); setDoctors((d || []).map(mapDoctor)); setCases((c || []).map(mapCase));
       setCollections((col || []).map(mapCollection)); setDoctorPays((dp || []).map(mapDoctorPay));
       setReferrals((ref || []).map(mapReferral)); setGifts((g || []).map(mapGift));
       setExpenses((exp || []).map(mapExpense)); setAssets((ast || []).map(mapAsset)); setCapital((cap || []).map(mapCapital));
+      const otherMapped = (other || []).map(mapOther);
+      setLoans(otherMapped.filter((x) => x.category === "unsecured_loan"));
+      setDeposits(otherMapped.filter((x) => x.category === "security_deposit"));
     } catch (e) { setLoadError(e.message); }
     setLoading(false);
   }, [call, session]);
@@ -621,24 +633,35 @@ export default function App() {
 
   // create/delete helpers — call the API, then patch local state
   const addDoctor = useCallback(async (body) => { const r = await call("/doctors", { method: "POST", body }); setDoctors((p) => [...p, mapDoctor(r)]); }, [call]);
+  const updateDoctor = useCallback(async (id, body) => { const r = await call(`/doctors/${id}`, { method: "PUT", body }); setDoctors((p) => p.map((x) => (x.id === id ? mapDoctor(r) : x))); }, [call]);
   const removeDoctor = useCallback(async (id) => { await call(`/doctors/${id}`, { method: "DELETE" }); setDoctors((p) => p.filter((x) => x.id !== id)); }, [call]);
   const addCase = useCallback(async (body) => { const r = await call("/cases", { method: "POST", body }); const doc = doctors.find((d) => d.id === body.doctorId); setCases((p) => [{ ...mapCase(r), doctorName: doc?.name }, ...p]); return r; }, [call, doctors]);
+  const updateCase = useCallback(async (id, body) => { const r = await call(`/cases/${id}`, { method: "PUT", body }); const doc = doctors.find((d) => d.id === body.doctorId); setCases((p) => p.map((x) => (x.id === id ? { ...mapCase(r), doctorName: doc?.name } : x))); }, [call, doctors]);
   const removeCase = useCallback(async (id) => { await call(`/cases/${id}`, { method: "DELETE" }); setCases((p) => p.filter((x) => x.id !== id)); }, [call]);
   const addCollection = useCallback(async (body) => { const r = await call("/collections", { method: "POST", body }); setCollections((p) => [mapCollection(r), ...p]); }, [call]);
   const updateCollection = useCallback(async (id, body) => { const r = await call(`/collections/${id}`, { method: "PUT", body }); setCollections((p) => p.map((x) => (x.id === id ? mapCollection(r) : x))); }, [call]);
   const removeCollection = useCallback(async (id) => { await call(`/collections/${id}`, { method: "DELETE" }); setCollections((p) => p.filter((x) => x.id !== id)); }, [call]);
   const addDoctorPay = useCallback(async (body) => { const r = await call("/doctor-pays", { method: "POST", body }); const doc = doctors.find((d) => d.id === body.doctorId); setDoctorPays((p) => [{ ...mapDoctorPay(r), doctorName: doc?.name }, ...p]); }, [call, doctors]);
+  const updateDoctorPay = useCallback(async (id, body) => { const r = await call(`/doctor-pays/${id}`, { method: "PUT", body }); const doc = doctors.find((d) => d.id === body.doctorId); setDoctorPays((p) => p.map((x) => (x.id === id ? { ...mapDoctorPay(r), doctorName: doc?.name } : x))); }, [call, doctors]);
   const removeDoctorPay = useCallback(async (id) => { await call(`/doctor-pays/${id}`, { method: "DELETE" }); setDoctorPays((p) => p.filter((x) => x.id !== id)); }, [call]);
   const addReferral = useCallback(async (body) => { const r = await call("/referrals", { method: "POST", body }); setReferrals((p) => [mapReferral(r), ...p]); }, [call]);
+  const updateReferral = useCallback(async (id, body) => { const r = await call(`/referrals/${id}`, { method: "PUT", body }); setReferrals((p) => p.map((x) => (x.id === id ? mapReferral(r) : x))); }, [call]);
   const removeReferral = useCallback(async (id) => { await call(`/referrals/${id}`, { method: "DELETE" }); setReferrals((p) => p.filter((x) => x.id !== id)); }, [call]);
   const addGift = useCallback(async (body) => { const r = await call("/gifts", { method: "POST", body }); const doc = doctors.find((d) => d.id === body.doctorId); setGifts((p) => [{ ...mapGift(r), doctorName: doc?.name }, ...p]); }, [call, doctors]);
+  const updateGift = useCallback(async (id, body) => { const r = await call(`/gifts/${id}`, { method: "PUT", body }); const doc = doctors.find((d) => d.id === body.doctorId); setGifts((p) => p.map((x) => (x.id === id ? { ...mapGift(r), doctorName: doc?.name } : x))); }, [call, doctors]);
   const removeGift = useCallback(async (id) => { await call(`/gifts/${id}`, { method: "DELETE" }); setGifts((p) => p.filter((x) => x.id !== id)); }, [call]);
   const addExpense = useCallback(async (body) => { const r = await call("/expenses", { method: "POST", body }); setExpenses((p) => [mapExpense(r), ...p]); }, [call]);
+  const updateExpense = useCallback(async (id, body) => { const r = await call(`/expenses/${id}`, { method: "PUT", body }); setExpenses((p) => p.map((x) => (x.id === id ? mapExpense(r) : x))); }, [call]);
   const removeExpense = useCallback(async (id) => { await call(`/expenses/${id}`, { method: "DELETE" }); setExpenses((p) => p.filter((x) => x.id !== id)); }, [call]);
   const addAsset = useCallback(async (body) => { const r = await call("/assets", { method: "POST", body }); setAssets((p) => [mapAsset(r), ...p]); }, [call]);
+  const updateAsset = useCallback(async (id, body) => { const r = await call(`/assets/${id}`, { method: "PUT", body }); setAssets((p) => p.map((x) => (x.id === id ? mapAsset(r) : x))); }, [call]);
   const removeAsset = useCallback(async (id) => { await call(`/assets/${id}`, { method: "DELETE" }); setAssets((p) => p.filter((x) => x.id !== id)); }, [call]);
   const addCapital = useCallback(async (body) => { const r = await call("/capital", { method: "POST", body }); setCapital((p) => [mapCapital(r), ...p]); }, [call]);
   const removeCapital = useCallback(async (id) => { await call(`/capital/${id}`, { method: "DELETE" }); setCapital((p) => p.filter((x) => x.id !== id)); }, [call]);
+  const mapOther = (r) => ({ id: r.id, category: r.category, txnType: r.txn_type, partyName: r.party_name, amount: Number(r.amount), date: d10(r.txn_date), note: r.note });
+  const addOtherBalance = useCallback(async (body) => { const r = await call("/other-balance", { method: "POST", body }); const item = mapOther(r); (item.category === "unsecured_loan" ? setLoans : setDeposits)((p) => [item, ...p]); }, [call]);
+  const updateOtherBalance = useCallback(async (id, body) => { const r = await call(`/other-balance/${id}`, { method: "PUT", body }); const item = mapOther(r); (item.category === "unsecured_loan" ? setLoans : setDeposits)((p) => p.map((x) => (x.id === id ? item : x))); }, [call]);
+  const removeOtherBalance = useCallback(async (id, category) => { await call(`/other-balance/${id}`, { method: "DELETE" }); (category === "unsecured_loan" ? setLoans : setDeposits)((p) => p.filter((x) => x.id !== id)); }, [call]);
   const updateSettings = useCallback(async (body) => { const r = await call("/settings", { method: "PUT", body }); setSettings(mapSettings(r)); }, [call]);
 
   if (!session) return <AuthScreen onLogin={setSession} origin={origin} setOrigin={setOrigin} />;
@@ -668,6 +691,10 @@ export default function App() {
           .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px 20px;margin-bottom:18px;box-shadow:0 1px 4px rgba(10,40,36,.05);}
           .card h2{font-family:'Plus Jakarta Sans',sans-serif;font-size:16.5px;margin:0 0 12px;color:var(--primary-dark);}
           .grid-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:20px;}
+          .period-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-bottom:18px;}
+          .period-card{margin-bottom:0;}
+          .period-card table{font-size:12.5px;}
+          .period-card td{padding:5px 4px;}
           .stat{background:var(--surface);border:1px solid var(--border);border-left:4px solid var(--accent);border-radius:10px;padding:14px 16px;}
           .stat .label{font-size:10.5px;text-transform:uppercase;letter-spacing:.8px;color:var(--ink-soft);font-weight:700;}
           .stat .value{font-family:'IBM Plex Mono',monospace;font-size:20px;font-weight:600;margin-top:5px;}
@@ -736,17 +763,17 @@ export default function App() {
             ) : (
               <>
                 {view === "dashboard" && <Dashboard settings={settings} collections={collections} referrals={referrals} expenses={expenses} doctorPays={doctorPays} fy={fy} />}
-                {view === "cases" && can("cases", "view") && <CaseRecords cases={cases} addCase={addCase} removeCase={removeCase} doctors={doctors} can={can} />}
-                {view === "patients" && can("cases", "view") && <PatientHistory can={can} />}
+                {view === "cases" && can("cases", "view") && <CaseRecords cases={cases} addCase={addCase} updateCase={updateCase} removeCase={removeCase} doctors={doctors} can={can} />}
+                {view === "patients" && can("cases", "view") && <PatientHistory can={can} updateCase={updateCase} updateCollection={updateCollection} cases={cases} doctors={doctors} />}
                 {view === "collections" && can("collections", "view") && <Collections collections={collections} addCollection={addCollection} updateCollection={updateCollection} removeCollection={removeCollection} cases={cases} fy={fy} can={can} />}
-                {view === "doctors" && can("doctorPay", "view") && <DoctorShifts doctors={doctors} addDoctor={addDoctor} removeDoctor={removeDoctor} doctorPays={doctorPays} addDoctorPay={addDoctorPay} removeDoctorPay={removeDoctorPay} can={can} />}
-                {view === "referrals" && can("referrals", "view") && <Referrals referrals={referrals} addReferral={addReferral} removeReferral={removeReferral} fy={fy} can={can} />}
-                {view === "gifts" && can("gifts", "view") && <Gifts gifts={gifts} addGift={addGift} removeGift={removeGift} doctors={doctors} can={can} />}
-                {view === "expenses" && can("expenses", "view") && <Expenses expenses={expenses} addExpense={addExpense} removeExpense={removeExpense} fy={fy} can={can} />}
-                {view === "assets" && can("assets", "view") && <FixedAssets assets={assets} addAsset={addAsset} removeAsset={removeAsset} fy={fy} can={can} />}
+                {view === "doctors" && can("doctorPay", "view") && <DoctorShifts doctors={doctors} addDoctor={addDoctor} updateDoctor={updateDoctor} removeDoctor={removeDoctor} doctorPays={doctorPays} addDoctorPay={addDoctorPay} updateDoctorPay={updateDoctorPay} removeDoctorPay={removeDoctorPay} can={can} />}
+                {view === "referrals" && can("referrals", "view") && <Referrals referrals={referrals} addReferral={addReferral} updateReferral={updateReferral} removeReferral={removeReferral} fy={fy} can={can} />}
+                {view === "gifts" && can("gifts", "view") && <Gifts gifts={gifts} addGift={addGift} updateGift={updateGift} removeGift={removeGift} doctors={doctors} can={can} />}
+                {view === "expenses" && can("expenses", "view") && <Expenses expenses={expenses} addExpense={addExpense} updateExpense={updateExpense} removeExpense={removeExpense} fy={fy} can={can} />}
+                {view === "assets" && can("assets", "view") && <FixedAssets assets={assets} addAsset={addAsset} updateAsset={updateAsset} removeAsset={removeAsset} fy={fy} can={can} />}
                 {view === "statements" && can("statements", "view") && <FinancialStatements fy={fy} settings={settings} can={can} />}
                 {view === "auditLog" && can("auditLog", "view") && <AccessReport can={can} />}
-                {view === "settings" && <SettingsPage settings={settings} updateSettings={updateSettings} session={session} origin={origin} capital={capital} addCapital={addCapital} removeCapital={removeCapital} can={can} />}
+                {view === "settings" && <SettingsPage settings={settings} updateSettings={updateSettings} session={session} origin={origin} capital={capital} addCapital={addCapital} removeCapital={removeCapital} loans={loans} deposits={deposits} addOtherBalance={addOtherBalance} updateOtherBalance={updateOtherBalance} removeOtherBalance={removeOtherBalance} can={can} />}
                 {view === "admin" && session.role === "Admin" && <AdminUsers />}
               </>
             )}
@@ -759,40 +786,97 @@ export default function App() {
 }
 
 /* ============================== DASHBOARD ============================== */
+/** Computes mode-wise collection, outstanding dues, expenses, and net
+ *  profit for whatever date range [start,end] is passed in. Net profit here
+ *  = total revenue billed (collected + still outstanding) minus expenses
+ *  logged in that same window — a quick operational view, not the full
+ *  Income Statement (which also nets off doctor pay and depreciation). */
+function periodSummary(collections, expenses, start, end) {
+  const rows = collections.filter((c) => c.date >= start && c.date <= end);
+  const modeTotals = {};
+  COLLECTION_MODES.forEach((m) => { modeTotals[m] = 0; });
+  let outstanding = 0;
+  rows.forEach((c) => {
+    modeTotals[c.mode || "Other"] = (modeTotals[c.mode || "Other"] || 0) + Number(c.amountCollected || 0);
+    outstanding += Number(c.balance || 0);
+  });
+  const expenseTotal = expenses.filter((e) => e.date >= start && e.date <= end).reduce((s, e) => s + Number(e.amount || 0), 0);
+  const collectedTotal = Object.values(modeTotals).reduce((s, v) => s + v, 0);
+  const netProfit = collectedTotal + outstanding - expenseTotal;
+  return { modeTotals, outstanding, expenseTotal, netProfit, collectedTotal };
+}
+
+function PeriodCard({ title, summary }) {
+  return (
+    <div className="card period-card">
+      <h2>{title}</h2>
+      <table>
+        <tbody>
+          {COLLECTION_MODES.map((m) => (
+            <tr key={m}><td>{m}</td><td className="num">{inr(summary.modeTotals[m] || 0)}</td></tr>
+          ))}
+          <tr style={{ fontWeight: 700, borderTop: "1px solid var(--border)" }}><td>Collected total</td><td className="num">{inr(summary.collectedTotal)}</td></tr>
+          <tr><td>+ Outstanding due</td><td className="num">{inr(summary.outstanding)}</td></tr>
+          <tr><td>− Expenses</td><td className="num" style={{ color: "var(--expense)" }}>{inr(summary.expenseTotal)}</td></tr>
+          <tr style={{ fontWeight: 700, borderTop: "2px solid var(--accent)" }}>
+            <td>Net Profit</td>
+            <td className="num" style={{ color: summary.netProfit >= 0 ? "var(--income)" : "var(--expense)" }}>{inr(summary.netProfit)}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function Dashboard({ settings, collections, referrals, expenses, doctorPays, fy }) {
   const { call } = useApi();
   const [income, setIncome] = useState(null);
   useEffect(() => { call(`/statements/income?fy=${fy}`).then(setIncome).catch(() => setIncome(null)); }, [call, fy]);
 
   const t = todayISO();
-  const sumDue = (arr, s, e) => arr.filter((c) => c.date >= s && c.date <= e).reduce((a, c) => a + Number(c.amountDue || 0), 0);
-  const weekStart = new Date(); weekStart.setDate(weekStart.getDate() - 6);
+  const yest = (() => { const d = new Date(); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10); })();
+  const weekStart = (() => { const d = new Date(); d.setDate(d.getDate() - 6); return d.toISOString().slice(0, 10); })();
   const monthStart = t.slice(0, 8) + "01";
-  const today = sumDue(collections, t, t);
-  const week = sumDue(collections, weekStart.toISOString().slice(0, 10), t);
-  const month = sumDue(collections, monthStart, t);
-  const outstanding = collections.reduce((a, c) => a + Number(c.balance || 0), 0);
+  const range = fyRange(fy);
+
+  const todaySummary = periodSummary(collections, expenses, t, t);
+  const yestSummary = periodSummary(collections, expenses, yest, yest);
+  const weekSummary = periodSummary(collections, expenses, weekStart, t);
+  const monthSummary = periodSummary(collections, expenses, monthStart, t);
+  const yearSummary = periodSummary(collections, expenses, range.start, range.end);
+
   const netProfit = income ? income.netProfit : null;
+  const outstanding = collections.reduce((a, c) => a + Number(c.balance || 0), 0);
 
   const last30 = [];
-  for (let i = 29; i >= 0; i--) { const dt = new Date(); dt.setDate(dt.getDate() - i); const iso = dt.toISOString().slice(0, 10); last30.push({ date: iso.slice(5), amount: sumDue(collections, iso, iso) }); }
-  const range = fyRange(fy);
+  for (let i = 29; i >= 0; i--) { const dt = new Date(); dt.setDate(dt.getDate() - i); const iso = dt.toISOString().slice(0, 10); const s = periodSummary(collections, [], iso, iso); last30.push({ date: iso.slice(5), amount: s.collectedTotal + s.outstanding }); }
   const expenseByCat = {};
   expenses.filter((e) => e.date >= range.start && e.date <= range.end).forEach((e) => { expenseByCat[e.category] = (expenseByCat[e.category] || 0) + Number(e.amount); });
   const pieData = Object.entries(expenseByCat).map(([name, value]) => ({ name, value }));
 
+  const collectionPieData = [
+    ...COLLECTION_MODES.map((m) => ({ name: m, value: yearSummary.modeTotals[m] || 0 })),
+    { name: "Outstanding Due", value: yearSummary.outstanding },
+  ].filter((x) => x.value > 0);
+
   return (
     <div>
       <div className="grid-cards">
-        <div className="stat"><div className="label">Today's Collection</div><div className="value">{inr(today)}</div></div>
-        <div className="stat"><div className="label">Last 7 Days</div><div className="value">{inr(week)}</div></div>
-        <div className="stat"><div className="label">This Month</div><div className="value">{inr(month)}</div></div>
-        <div className="stat"><div className="label">Outstanding Dues</div><div className="value">{inr(outstanding)}</div></div>
+        <div className="stat"><div className="label">Outstanding Dues (overall)</div><div className="value">{inr(outstanding)}</div></div>
         <div className="stat" style={{ borderLeftColor: (netProfit ?? 0) >= 0 ? "#1F8A5F" : "#B3423A" }}>
-          <div className="label">Net Profit (FY {fy})</div>
+          <div className="label">Net Profit (FY {fy}, full P&amp;L)</div>
           <div className="value" style={{ color: (netProfit ?? 0) >= 0 ? "#1F8A5F" : "#B3423A" }}>{netProfit === null ? "…" : inr(netProfit)}</div>
         </div>
       </div>
+
+      <div className="period-grid">
+        <PeriodCard title="Today's Collection" summary={todaySummary} />
+        <PeriodCard title="Yesterday's Collection" summary={yestSummary} />
+        <PeriodCard title="Last 7 Days" summary={weekSummary} />
+        <PeriodCard title="This Month" summary={monthSummary} />
+        <PeriodCard title={`This Year (FY ${fy})`} summary={yearSummary} />
+      </div>
+
       <div className="card">
         <h2>Collection trend — last 30 days</h2>
         <ResponsiveContainer width="100%" height={220}>
@@ -802,6 +886,14 @@ function Dashboard({ settings, collections, referrals, expenses, doctorPays, fy 
             <Tooltip formatter={(v) => inr(v)} /><Area type="monotone" dataKey="amount" stroke="#0B4F4A" fill="url(#cg)" strokeWidth={2} />
           </AreaChart>
         </ResponsiveContainer>
+      </div>
+      <div className="card">
+        <h2>Collection breakdown — FY {fy} (mode &amp; outstanding dues)</h2>
+        {collectionPieData.length === 0 ? <div className="empty">No collections logged yet for this financial year.</div> : (
+          <ResponsiveContainer width="100%" height={240}>
+            <PieChart><Pie data={collectionPieData} dataKey="value" nameKey="name" innerRadius={55} outerRadius={90} paddingAngle={2}>{collectionPieData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}</Pie><Legend /><Tooltip formatter={(v) => inr(v)} /></PieChart>
+          </ResponsiveContainer>
+        )}
       </div>
       <div className="card">
         <h2>Expense breakdown — FY {fy}</h2>
@@ -816,7 +908,7 @@ function Dashboard({ settings, collections, referrals, expenses, doctorPays, fy 
 }
 
 /* ============================== CASE RECORDS ============================== */
-function CaseRecords({ cases, addCase, removeCase, doctors, can }) {
+function CaseRecords({ cases, addCase, updateCase, removeCase, doctors, can }) {
   const blank = { date: todayISO(), patientName: "", phone: "", briefHistory: "", doctorId: doctors[0]?.id || "", shift: "Morning", externalPrescription: "", image: null };
   const [form, setForm] = useState(blank);
   const [meds, setMeds] = useState([{ name: "", qty: "", price: "" }]);
@@ -826,24 +918,34 @@ function CaseRecords({ cases, addCase, removeCase, doctors, can }) {
   const updMed = (i, f, v) => { const n = [...meds]; n[i] = { ...n[i], [f]: v }; setMeds(n); };
   const rmMed = (i) => setMeds(meds.filter((_, idx) => idx !== i));
 
+  const [editingId, setEditingId] = useState(null);
+  const startEdit = (c) => {
+    setEditingId(c.id);
+    setForm({ date: c.date, patientName: c.patientName, phone: c.phone || "", briefHistory: c.briefHistory || "", doctorId: c.doctorId || "", shift: c.shift || "Morning", externalPrescription: c.externalPrescription || "", image: c.image || null });
+    setMeds(c.medicines && c.medicines.length ? c.medicines.map((m) => ({ name: m.name, qty: String(m.qty), price: String(m.price) })) : [{ name: "", qty: "", price: "" }]);
+    setErr("");
+  };
+  const cancelEdit = () => { setEditingId(null); setForm(blank); setMeds([{ name: "", qty: "", price: "" }]); setErr(""); };
   const save = async () => {
     setErr("");
     if (!form.patientName.trim()) { setErr("Enter the patient's name."); return; }
     const medicines = meds.filter((m) => m.name.trim()).map((m) => ({ name: m.name, qty: Number(m.qty) || 0, price: Number(m.price) || 0 }));
     setBusy(true);
+    const payload = { date: form.date, patientName: form.patientName, phone: form.phone, briefHistory: form.briefHistory, doctorId: form.doctorId || null, shift: form.shift, externalPrescription: form.externalPrescription, imageUrl: form.image, medicines };
     try {
-      await addCase({ date: form.date, patientName: form.patientName, phone: form.phone, briefHistory: form.briefHistory, doctorId: form.doctorId || null, shift: form.shift, externalPrescription: form.externalPrescription, imageUrl: form.image, medicines });
+      if (editingId) { await updateCase(editingId, payload); setEditingId(null); }
+      else { await addCase(payload); }
       setForm(blank); setMeds([{ name: "", qty: "", price: "" }]);
     } catch (e) { setErr(e.message); }
     setBusy(false);
   };
-  const remove = async (id) => { try { await removeCase(id); } catch (e) { setErr(e.message); } };
+  const remove = async (id) => { try { await removeCase(id); if (editingId === id) cancelEdit(); } catch (e) { setErr(e.message); } };
   const medValue = (c) => (c.medicines || []).reduce((s, m) => s + m.qty * m.price, 0);
 
   return (
     <div>
       <div className="card">
-        <h2>New case paper entry</h2>
+        <h2>{editingId ? "Edit case paper entry" : "New case paper entry"}</h2>
         <div className="form-grid">
           <div><label>Date</label><input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /></div>
           <div><label>Patient name</label><input type="text" value={form.patientName} onChange={(e) => setForm({ ...form, patientName: e.target.value })} /></div>
@@ -872,7 +974,10 @@ function CaseRecords({ cases, addCase, removeCase, doctors, can }) {
           <label style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "var(--ink-soft)", textTransform: "uppercase", marginBottom: 6 }}>Case paper photo</label>
           <ImageCapture value={form.image} onChange={(img) => setForm({ ...form, image: img })} />
         </div>
-        {can("cases", "write") && <button className="btn" style={{ marginTop: 16 }} type="button" disabled={busy} onClick={save}>{busy ? "Saving…" : "Save case record"}</button>}
+        <div style={{ marginTop: 16, display: "flex", gap: 8 }}>
+          {(editingId ? can("cases", "edit") : can("cases", "write")) && <button className="btn" type="button" disabled={busy} onClick={save}>{busy ? "Saving…" : editingId ? "Update case record" : "Save case record"}</button>}
+          {editingId && <button className="btn secondary" type="button" onClick={cancelEdit}>Cancel edit</button>}
+        </div>
         <ErrorNote msg={err} />
         <div className="note-box">Loose-medicine values are for clinical/inventory reference only — not posted as a separate expense, since "Medicine Bills" already covers what the clinic pays its supplier.</div>
       </div>
@@ -885,7 +990,7 @@ function CaseRecords({ cases, addCase, removeCase, doctors, can }) {
               <tr key={c.id}><td>{c.caseNo}</td><td>{c.date}</td><td>{c.patientName}</td><td>{c.doctorName || "—"}</td>
                 <td><span className={"pill " + (c.shift || "").toLowerCase()}>{c.shift}</span></td>
                 <td style={{ maxWidth: 180 }}>{c.briefHistory}</td><td className="num">{inr(medValue(c))}</td>
-                <td>{c.image ? "📎" : "—"}</td><td>{can("cases", "delete") && <button className="btn danger small" type="button" onClick={() => remove(c.id)}>Delete</button>}</td></tr>
+                <td>{c.image ? "📎" : "—"}</td><td style={{ display: "flex", gap: 6 }}>{can("cases", "edit") && <button className="btn secondary small" type="button" onClick={() => startEdit(c)}>Edit</button>}{can("cases", "delete") && <button className="btn danger small" type="button" onClick={() => remove(c.id)}>Delete</button>}</td></tr>
             ))}</tbody>
           </table>
         )}
@@ -903,8 +1008,11 @@ function CaseRecords({ cases, addCase, removeCase, doctors, can }) {
 }
 
 /* ============================== PATIENT HISTORY ============================== */
-function PatientHistory({ can }) {
+function PatientHistory({ can, updateCase, updateCollection, cases, doctors }) {
   const { call } = useApi();
+  const [editCase, setEditCase] = useState(null);
+  const [editColl, setEditColl] = useState(null);
+  const [editErr, setEditErr] = useState("");
   const [query, setQuery] = useState("");
   const [suggestions, setSuggestions] = useState([]);
   const [selected, setSelected] = useState(null);
@@ -934,6 +1042,31 @@ function PatientHistory({ can }) {
   };
   useEffect(() => { if (selected) load(); }, [selected]); // eslint-disable-line
 
+  const startEditCase = (c) => {
+    setEditCase({ id: c.id, date: d10(c.case_date), patientName: c.patient_name, phone: c.phone || "", briefHistory: c.brief_history || "", doctorId: c.doctor_id || "", shift: c.shift || "Morning", externalPrescription: c.external_prescription || "", image: c.image_url || null, medicines: (c.medicines || []).map((m) => ({ name: m.medicine_name, qty: String(m.qty), price: String(m.unit_price) })) });
+    setEditErr("");
+  };
+  const saveEditCase = async () => {
+    setEditErr("");
+    const medicines = editCase.medicines.filter((m) => m.name.trim()).map((m) => ({ name: m.name, qty: Number(m.qty) || 0, price: Number(m.price) || 0 }));
+    try {
+      await updateCase(editCase.id, { date: editCase.date, patientName: editCase.patientName, phone: editCase.phone, briefHistory: editCase.briefHistory, doctorId: editCase.doctorId || null, shift: editCase.shift, externalPrescription: editCase.externalPrescription, imageUrl: editCase.image, medicines });
+      setEditCase(null); load();
+    } catch (e) { setEditErr(e.message); }
+  };
+
+  const startEditColl = (c) => {
+    setEditColl({ id: c.id, caseId: c.case_id || "", caseNo: c.case_no || "", patientName: c.patient_name, phone: c.phone || "", date: d10(c.collection_date), amountDue: String(c.amount_due), amountCollected: String(c.amount_collected), mode: c.mode || "Cash", image: c.image_url || null });
+    setEditErr("");
+  };
+  const saveEditColl = async () => {
+    setEditErr("");
+    try {
+      await updateCollection(editColl.id, { caseId: editColl.caseId || null, caseNo: editColl.caseNo || null, patientName: editColl.patientName, phone: editColl.phone, date: editColl.date, amountDue: Number(editColl.amountDue), amountCollected: Number(editColl.amountCollected) || 0, mode: editColl.mode, imageUrl: editColl.image });
+      setEditColl(null); load();
+    } catch (e) { setEditErr(e.message); }
+  };
+
   const medValue = (c) => (c.medicines || []).reduce((s, m) => s + Number(m.qty) * Number(m.unit_price), 0);
 
   const doExcel = () => {
@@ -948,11 +1081,11 @@ function PatientHistory({ can }) {
     if (!data) return;
     const win = document.getElementById("print-root");
     if (!win) { window.print(); return; }
-    const visitRows = data.cases.map((c) => `<tr><td>${c.case_no}</td><td>${d10(c.case_date)}</td><td>${c.doctor_name || ""}</td><td>${c.brief_history || ""}</td></tr>`).join("");
-    const payRows = data.collections.map((c) => `<tr><td>${d10(c.collection_date)}</td><td>${c.case_no || ""}</td><td>${inr(c.amount_due)}</td><td>${inr(c.amount_collected)}</td><td>${inr(c.balance)}</td></tr>`).join("");
+    const visitRows = data.cases.map((c) => `<tr><td>${escapeHtml(c.case_no)}</td><td>${d10(c.case_date)}</td><td>${escapeHtml(c.doctor_name || "")}</td><td>${escapeHtml(c.brief_history || "")}</td></tr>`).join("");
+    const payRows = data.collections.map((c) => `<tr><td>${d10(c.collection_date)}</td><td>${escapeHtml(c.case_no || "")}</td><td>${inr(c.amount_due)}</td><td>${inr(c.amount_collected)}</td><td>${inr(c.balance)}</td></tr>`).join("");
     win.innerHTML = `
-      <h2>Patient History — ${data.patient.name}${data.patient.phone ? " (" + data.patient.phone + ")" : ""}</h2>
-      <p style="color:#5B6B69;font-size:12px;">${from || "start"} to ${to || "today"}</p>
+      <h2>Patient History — ${escapeHtml(data.patient.name)}${data.patient.phone ? " (" + escapeHtml(data.patient.phone) + ")" : ""}</h2>
+      <p style="color:#5B6B69;font-size:12px;">${escapeHtml(from || "start")} to ${escapeHtml(to || "today")}</p>
       <h3 style="margin-top:16px;">Visit History</h3>
       <table style="width:100%;border-collapse:collapse;font-size:12px;">
         <thead><tr><th style="text-align:left;border-bottom:2px solid #C9A227;padding:5px;">Case No.</th><th style="text-align:left;border-bottom:2px solid #C9A227;padding:5px;">Date</th><th style="text-align:left;border-bottom:2px solid #C9A227;padding:5px;">Doctor</th><th style="text-align:left;border-bottom:2px solid #C9A227;padding:5px;">History</th></tr></thead>
@@ -983,6 +1116,43 @@ function PatientHistory({ can }) {
         {query.trim() && !selected && suggestions.length === 0 && <div className="empty">No matching patients yet — keep typing, or check spelling.</div>}
       </div>
 
+      {editCase && (
+        <div className="card" style={{ borderColor: "var(--accent)" }}>
+          <h2>Edit visit — {editCase.patientName}</h2>
+          <div className="form-grid">
+            <div><label>Date</label><input type="date" value={editCase.date} onChange={(e) => setEditCase({ ...editCase, date: e.target.value })} /></div>
+            <div><label>Patient name</label><input type="text" value={editCase.patientName} onChange={(e) => setEditCase({ ...editCase, patientName: e.target.value })} /></div>
+            <div><label>Phone</label><input type="tel" value={editCase.phone} onChange={(e) => setEditCase({ ...editCase, phone: e.target.value })} /></div>
+            <div><label>Doctor</label><select value={editCase.doctorId} onChange={(e) => setEditCase({ ...editCase, doctorId: e.target.value })}>{doctors.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}</select></div>
+            <div><label>Shift</label><select value={editCase.shift} onChange={(e) => setEditCase({ ...editCase, shift: e.target.value })}>{SHIFTS.map((s) => <option key={s} value={s}>{s}</option>)}</select></div>
+          </div>
+          <div className="form-grid">
+            <div style={{ gridColumn: "span 2" }}><label>Brief medical history</label><input type="text" style={{ width: "100%" }} value={editCase.briefHistory} onChange={(e) => setEditCase({ ...editCase, briefHistory: e.target.value })} /></div>
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="btn" type="button" onClick={saveEditCase}>Update visit</button>
+            <button className="btn secondary" type="button" onClick={() => setEditCase(null)}>Cancel</button>
+          </div>
+          <ErrorNote msg={editErr} />
+        </div>
+      )}
+      {editColl && (
+        <div className="card" style={{ borderColor: "var(--accent)" }}>
+          <h2>Edit payment — {editColl.patientName}</h2>
+          <div className="form-grid">
+            <div><label>Date</label><input type="date" value={editColl.date} onChange={(e) => setEditColl({ ...editColl, date: e.target.value })} /></div>
+            <div><label>Amount due (₹)</label><input type="number" value={editColl.amountDue} onChange={(e) => setEditColl({ ...editColl, amountDue: e.target.value })} /></div>
+            <div><label>Amount collected (₹)</label><input type="number" value={editColl.amountCollected} onChange={(e) => setEditColl({ ...editColl, amountCollected: e.target.value })} /></div>
+            <div><label>Mode</label><select value={editColl.mode} onChange={(e) => setEditColl({ ...editColl, mode: e.target.value })}>{COLLECTION_MODES.map((m) => <option key={m} value={m}>{m}</option>)}</select></div>
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="btn" type="button" onClick={saveEditColl}>Update payment</button>
+            <button className="btn secondary" type="button" onClick={() => setEditColl(null)}>Cancel</button>
+          </div>
+          <ErrorNote msg={editErr} />
+        </div>
+      )}
+
       {selected && (
         <>
           <div className="card">
@@ -1001,11 +1171,11 @@ function PatientHistory({ can }) {
                 <h2>Visit history ({data.cases.length})</h2>
                 {data.cases.length === 0 ? <div className="empty">No visits in this range.</div> : (
                   <table>
-                    <thead><tr><th>Case No.</th><th>Date</th><th>Doctor</th><th>Shift</th><th>History</th><th className="num">Meds Value</th></tr></thead>
+                    <thead><tr><th>Case No.</th><th>Date</th><th>Doctor</th><th>Shift</th><th>History</th><th className="num">Meds Value</th><th></th></tr></thead>
                     <tbody>{data.cases.map((c) => (
                       <tr key={c.id}><td>{c.case_no}</td><td>{d10(c.case_date)}</td><td>{c.doctor_name || "—"}</td>
                         <td><span className={"pill " + (c.shift || "").toLowerCase()}>{c.shift}</span></td>
-                        <td style={{ maxWidth: 200 }}>{c.brief_history}</td><td className="num">{inr(medValue(c))}</td></tr>
+                        <td style={{ maxWidth: 200 }}>{c.brief_history}</td><td className="num">{inr(medValue(c))}</td><td>{can("cases", "edit") && <button className="btn secondary small" type="button" onClick={() => startEditCase(c)}>Edit</button>}</td></tr>
                     ))}</tbody>
                   </table>
                 )}
@@ -1014,11 +1184,11 @@ function PatientHistory({ can }) {
                 <h2>Payment history ({data.collections.length})</h2>
                 {data.collections.length === 0 ? <div className="empty">No payments in this range.</div> : (
                   <table>
-                    <thead><tr><th>Date</th><th>Case No.</th><th className="num">Due</th><th className="num">Collected</th><th className="num">Balance</th><th>Mode</th></tr></thead>
+                    <thead><tr><th>Date</th><th>Case No.</th><th className="num">Due</th><th className="num">Collected</th><th className="num">Balance</th><th>Mode</th><th></th></tr></thead>
                     <tbody>{data.collections.map((c) => (
                       <tr key={c.id}><td>{d10(c.collection_date)}</td><td>{c.case_no || "—"}</td>
                         <td className="num">{inr(c.amount_due)}</td><td className="num">{inr(c.amount_collected)}</td>
-                        <td className="num" style={{ color: c.balance > 0 ? "var(--expense)" : "var(--income)" }}>{inr(c.balance)}</td><td>{c.mode}</td></tr>
+                        <td className="num" style={{ color: c.balance > 0 ? "var(--expense)" : "var(--income)" }}>{inr(c.balance)}</td><td>{c.mode}</td><td>{can("collections", "edit") && <button className="btn secondary small" type="button" onClick={() => startEditColl(c)}>Edit</button>}</td></tr>
                     ))}</tbody>
                   </table>
                 )}
@@ -1146,7 +1316,7 @@ function RollupTable({ title, rows }) {
 }
 
 /* ============================== DOCTOR SHIFTS & PAY ============================== */
-function DoctorShifts({ doctors, addDoctor, removeDoctor, doctorPays, addDoctorPay, removeDoctorPay, can }) {
+function DoctorShifts({ doctors, addDoctor, updateDoctor, removeDoctor, doctorPays, addDoctorPay, updateDoctorPay, removeDoctorPay, can }) {
   const { call } = useApi();
   const [d, setD] = useState({ name: "", shift: "Morning", payType: "Daily", rate: "" });
   const [p, setP] = useState({ date: todayISO(), doctorId: "", amount: "" });
@@ -1161,10 +1331,34 @@ function DoctorShifts({ doctors, addDoctor, removeDoctor, doctorPays, addDoctorP
       .catch(() => {});
   }, [call, doctorPays]);
 
-  const addDoc = async () => { setErr(""); if (!d.name.trim()) return; setBusy(true); try { await addDoctor({ name: d.name, shift: d.shift, payType: d.payType, rate: Number(d.rate) || 0 }); setD({ name: "", shift: "Morning", payType: "Daily", rate: "" }); } catch (e) { setErr(e.message); } setBusy(false); };
-  const delDoc = async (id) => { try { await removeDoctor(id); } catch (e) { setErr(e.message); } };
-  const addPay = async () => { setErr(""); if (!p.doctorId || !p.amount) return; setBusy(true); try { await addDoctorPay({ doctorId: p.doctorId, date: p.date, amount: Number(p.amount) }); setP({ date: todayISO(), doctorId: "", amount: "" }); } catch (e) { setErr(e.message); } setBusy(false); };
-  const delPay = async (id) => { try { await removeDoctorPay(id); } catch (e) { setErr(e.message); } };
+  const [editingDocId, setEditingDocId] = useState(null);
+  const [editingPayId, setEditingPayId] = useState(null);
+  const startEditDoc = (x) => { setEditingDocId(x.id); setD({ name: x.name, shift: x.shift, payType: x.payType, rate: String(x.rate) }); setErr(""); };
+  const cancelEditDoc = () => { setEditingDocId(null); setD({ name: "", shift: "Morning", payType: "Daily", rate: "" }); setErr(""); };
+  const addDoc = async () => {
+    setErr(""); if (!d.name.trim()) return; setBusy(true);
+    const payload = { name: d.name, shift: d.shift, payType: d.payType, rate: Number(d.rate) || 0 };
+    try {
+      if (editingDocId) { await updateDoctor(editingDocId, payload); setEditingDocId(null); }
+      else { await addDoctor(payload); }
+      setD({ name: "", shift: "Morning", payType: "Daily", rate: "" });
+    } catch (e) { setErr(e.message); }
+    setBusy(false);
+  };
+  const delDoc = async (id) => { try { await removeDoctor(id); if (editingDocId === id) cancelEditDoc(); } catch (e) { setErr(e.message); } };
+  const startEditPay = (x) => { setEditingPayId(x.id); setP({ date: x.date, doctorId: x.doctorId, amount: String(x.amount) }); setErr(""); };
+  const cancelEditPay = () => { setEditingPayId(null); setP({ date: todayISO(), doctorId: "", amount: "" }); setErr(""); };
+  const addPay = async () => {
+    setErr(""); if (!p.doctorId || !p.amount) return; setBusy(true);
+    const payload = { doctorId: p.doctorId, date: p.date, amount: Number(p.amount) };
+    try {
+      if (editingPayId) { await updateDoctorPay(editingPayId, payload); setEditingPayId(null); }
+      else { await addDoctorPay(payload); }
+      setP({ date: todayISO(), doctorId: "", amount: "" });
+    } catch (e) { setErr(e.message); }
+    setBusy(false);
+  };
+  const delPay = async (id) => { try { await removeDoctorPay(id); if (editingPayId === id) cancelEditPay(); } catch (e) { setErr(e.message); } };
 
   return (
     <div>
@@ -1176,9 +1370,12 @@ function DoctorShifts({ doctors, addDoctor, removeDoctor, doctorPays, addDoctorP
           <div><label>Pay type</label><select value={d.payType} onChange={(e) => setD({ ...d, payType: e.target.value })}>{PAY_TYPES.map((s) => <option key={s} value={s}>{s}</option>)}</select></div>
           <div><label>Rate (₹)</label><input type="number" value={d.rate} onChange={(e) => setD({ ...d, rate: e.target.value })} /></div>
         </div>
-        {can("doctorPay", "write") && <button className="btn" type="button" disabled={busy} onClick={addDoc}>Add doctor</button>}
+        <div style={{ display: "flex", gap: 8 }}>
+          {(editingDocId ? can("doctorPay", "edit") : can("doctorPay", "write")) && <button className="btn" type="button" disabled={busy} onClick={addDoc}>{editingDocId ? "Update doctor" : "Add doctor"}</button>}
+          {editingDocId && <button className="btn secondary" type="button" onClick={cancelEditDoc}>Cancel edit</button>}
+        </div>
         <table style={{ marginTop: 14 }}><thead><tr><th>Name</th><th>Shift</th><th>Pay type</th><th className="num">Rate</th><th></th></tr></thead>
-          <tbody>{doctors.map((x) => (<tr key={x.id}><td>{x.name}</td><td><span className={"pill " + x.shift.toLowerCase()}>{x.shift}</span></td><td>{x.payType}</td><td className="num">{inr(x.rate)}</td><td>{can("doctorPay", "delete") && <button className="btn danger small" type="button" onClick={() => delDoc(x.id)}>Delete</button>}</td></tr>))}</tbody>
+          <tbody>{doctors.map((x) => (<tr key={x.id}><td>{x.name}</td><td><span className={"pill " + x.shift.toLowerCase()}>{x.shift}</span></td><td>{x.payType}</td><td className="num">{inr(x.rate)}</td><td style={{ display: "flex", gap: 6 }}>{can("doctorPay", "edit") && <button className="btn secondary small" type="button" onClick={() => startEditDoc(x)}>Edit</button>}{can("doctorPay", "delete") && <button className="btn danger small" type="button" onClick={() => delDoc(x.id)}>Delete</button>}</td></tr>))}</tbody>
         </table>
         <ErrorNote msg={err} />
       </div>
@@ -1189,9 +1386,12 @@ function DoctorShifts({ doctors, addDoctor, removeDoctor, doctorPays, addDoctorP
           <div><label>Doctor</label><select value={p.doctorId} onChange={(e) => { const doc = doctors.find((x) => x.id === e.target.value); setP({ ...p, doctorId: e.target.value, amount: doc ? doc.rate : p.amount }); }}><option value="">Select doctor</option>{doctors.map((x) => <option key={x.id} value={x.id}>{x.name} ({x.shift})</option>)}</select></div>
           <div><label>Amount (₹)</label><input type="number" value={p.amount} onChange={(e) => setP({ ...p, amount: e.target.value })} /></div>
         </div>
-        {can("doctorPay", "write") && <button className="btn" type="button" disabled={busy} onClick={addPay}>Log pay entry</button>}
+        <div style={{ display: "flex", gap: 8 }}>
+          {(editingPayId ? can("doctorPay", "edit") : can("doctorPay", "write")) && <button className="btn" type="button" disabled={busy} onClick={addPay}>{editingPayId ? "Update pay entry" : "Log pay entry"}</button>}
+          {editingPayId && <button className="btn secondary" type="button" onClick={cancelEditPay}>Cancel edit</button>}
+        </div>
         <table style={{ marginTop: 14 }}><thead><tr><th>Date</th><th>Doctor</th><th className="num">Amount</th><th></th></tr></thead>
-          <tbody>{[...doctorPays].sort((a, b) => (a.date < b.date ? 1 : -1)).map((x) => (<tr key={x.id}><td>{x.date}</td><td>{x.doctorName}</td><td className="num">{inr(x.amount)}</td><td>{can("doctorPay", "delete") && <button className="btn danger small" type="button" onClick={() => delPay(x.id)}>Delete</button>}</td></tr>))}</tbody>
+          <tbody>{[...doctorPays].sort((a, b) => (a.date < b.date ? 1 : -1)).map((x) => (<tr key={x.id}><td>{x.date}</td><td>{x.doctorName}</td><td className="num">{inr(x.amount)}</td><td style={{ display: "flex", gap: 6 }}>{can("doctorPay", "edit") && <button className="btn secondary small" type="button" onClick={() => startEditPay(x)}>Edit</button>}{can("doctorPay", "delete") && <button className="btn danger small" type="button" onClick={() => delPay(x.id)}>Delete</button>}</td></tr>))}</tbody>
         </table>
         <CustomExport
           rows={doctorPays} dateField="date" filenameBase="doctor-pay" printTitle="Doctor Shifts & Pay" canExport={can("doctorPay", "export")}
@@ -1214,17 +1414,30 @@ function DoctorShifts({ doctors, addDoctor, removeDoctor, doctorPays, addDoctorP
 }
 
 /* ============================== REFERRALS ============================== */
-function Referrals({ referrals, addReferral, removeReferral, fy, can }) {
+function Referrals({ referrals, addReferral, updateReferral, removeReferral, fy, can }) {
   const blank = { date: todayISO(), patientName: "", referralType: "Lab Test", referredTo: "", amount: "", notes: "" };
   const [form, setForm] = useState(blank); const [err, setErr] = useState(""); const [busy, setBusy] = useState(false);
-  const save = async () => { setErr(""); if (!form.patientName.trim() || !form.amount) { setErr("Enter patient name and amount."); return; } setBusy(true); try { await addReferral({ ...form, amount: Number(form.amount) }); setForm(blank); } catch (e) { setErr(e.message); } setBusy(false); };
-  const remove = async (id) => { try { await removeReferral(id); } catch (e) { setErr(e.message); } };
+  const [editingId, setEditingId] = useState(null);
+  const startEdit = (r) => { setEditingId(r.id); setForm({ date: r.date, patientName: r.patientName, referralType: r.referralType, referredTo: r.referredTo || "", amount: String(r.amount), notes: r.notes || "" }); setErr(""); };
+  const cancelEdit = () => { setEditingId(null); setForm(blank); setErr(""); };
+  const save = async () => {
+    setErr(""); if (!form.patientName.trim() || !form.amount) { setErr("Enter patient name and amount."); return; }
+    setBusy(true);
+    const payload = { ...form, amount: Number(form.amount) };
+    try {
+      if (editingId) { await updateReferral(editingId, payload); setEditingId(null); }
+      else { await addReferral(payload); }
+      setForm(blank);
+    } catch (e) { setErr(e.message); }
+    setBusy(false);
+  };
+  const remove = async (id) => { try { await removeReferral(id); if (editingId === id) cancelEdit(); } catch (e) { setErr(e.message); } };
   const range = fyRange(fy);
   const total = referrals.filter((r) => r.date >= range.start && r.date <= range.end).reduce((a, r) => a + r.amount, 0);
   return (
     <div>
       <div className="card">
-        <h2>New referral</h2>
+        <h2>{editingId ? "Edit referral" : "New referral"}</h2>
         <div className="form-grid">
           <div><label>Date</label><input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /></div>
           <div><label>Patient</label><input type="text" value={form.patientName} onChange={(e) => setForm({ ...form, patientName: e.target.value })} /></div>
@@ -1233,14 +1446,17 @@ function Referrals({ referrals, addReferral, removeReferral, fy, can }) {
           <div><label>Amount received (₹)</label><input type="number" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} /></div>
           <div><label>Notes</label><input type="text" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></div>
         </div>
-        {can("referrals", "write") && <button className="btn" type="button" disabled={busy} onClick={save}>Save referral</button>}
+        <div style={{ display: "flex", gap: 8 }}>
+          {(editingId ? can("referrals", "edit") : can("referrals", "write")) && <button className="btn" type="button" disabled={busy} onClick={save}>{editingId ? "Update referral" : "Save referral"}</button>}
+          {editingId && <button className="btn secondary" type="button" onClick={cancelEdit}>Cancel edit</button>}
+        </div>
         <ErrorNote msg={err} />
       </div>
       <div className="card">
         <h2>Referral income — FY {fy} total: {inr(total)}</h2>
         {referrals.length === 0 ? <div className="empty">No referrals recorded yet.</div> : (
           <table><thead><tr><th>Date</th><th>Patient</th><th>Type</th><th>Referred To</th><th className="num">Amount</th><th>Notes</th><th></th></tr></thead>
-            <tbody>{[...referrals].sort((a, b) => (a.date < b.date ? 1 : -1)).map((r) => (<tr key={r.id}><td>{r.date}</td><td>{r.patientName}</td><td>{r.referralType}</td><td>{r.referredTo}</td><td className="num">{inr(r.amount)}</td><td>{r.notes}</td><td>{can("referrals", "delete") && <button className="btn danger small" type="button" onClick={() => remove(r.id)}>Delete</button>}</td></tr>))}</tbody>
+            <tbody>{[...referrals].sort((a, b) => (a.date < b.date ? 1 : -1)).map((r) => (<tr key={r.id}><td>{r.date}</td><td>{r.patientName}</td><td>{r.referralType}</td><td>{r.referredTo}</td><td className="num">{inr(r.amount)}</td><td>{r.notes}</td><td style={{ display: "flex", gap: 6 }}>{can("referrals", "edit") && <button className="btn secondary small" type="button" onClick={() => startEdit(r)}>Edit</button>}{can("referrals", "delete") && <button className="btn danger small" type="button" onClick={() => remove(r.id)}>Delete</button>}</td></tr>))}</tbody>
           </table>
         )}
         <CustomExport
@@ -1254,15 +1470,28 @@ function Referrals({ referrals, addReferral, removeReferral, fy, can }) {
 }
 
 /* ============================== GIFTS REGISTER ============================== */
-function Gifts({ gifts, addGift, removeGift, doctors, can }) {
+function Gifts({ gifts, addGift, updateGift, removeGift, doctors, can }) {
   const blank = { date: todayISO(), repName: "", company: "", gift: "", doctorId: "", amount: "" };
   const [form, setForm] = useState(blank); const [err, setErr] = useState(""); const [busy, setBusy] = useState(false);
-  const save = async () => { setErr(""); if (!form.repName.trim()) { setErr("Enter the medical rep's name."); return; } setBusy(true); try { await addGift({ ...form, amount: Number(form.amount) || 0 }); setForm(blank); } catch (e) { setErr(e.message); } setBusy(false); };
-  const remove = async (id) => { try { await removeGift(id); } catch (e) { setErr(e.message); } };
+  const [editingId, setEditingId] = useState(null);
+  const startEdit = (g) => { setEditingId(g.id); setForm({ date: g.date, repName: g.repName, company: g.company || "", gift: g.gift || "", doctorId: g.doctorId || "", amount: g.amount ? String(g.amount) : "" }); setErr(""); };
+  const cancelEdit = () => { setEditingId(null); setForm(blank); setErr(""); };
+  const save = async () => {
+    setErr(""); if (!form.repName.trim()) { setErr("Enter the medical rep's name."); return; }
+    setBusy(true);
+    const payload = { ...form, amount: Number(form.amount) || 0 };
+    try {
+      if (editingId) { await updateGift(editingId, payload); setEditingId(null); }
+      else { await addGift(payload); }
+      setForm(blank);
+    } catch (e) { setErr(e.message); }
+    setBusy(false);
+  };
+  const remove = async (id) => { try { await removeGift(id); if (editingId === id) cancelEdit(); } catch (e) { setErr(e.message); } };
   return (
     <div>
       <div className="card">
-        <h2>Log a gift received</h2>
+        <h2>{editingId ? "Edit gift entry" : "Log a gift received"}</h2>
         <div className="form-grid">
           <div><label>Date</label><input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /></div>
           <div><label>Medical rep</label><input type="text" value={form.repName} onChange={(e) => setForm({ ...form, repName: e.target.value })} /></div>
@@ -1271,7 +1500,10 @@ function Gifts({ gifts, addGift, removeGift, doctors, can }) {
           <div><label>Doctor</label><select value={form.doctorId} onChange={(e) => setForm({ ...form, doctorId: e.target.value })}><option value="">— Select —</option>{doctors.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}</select></div>
           <div><label>Amount (₹, optional)</label><input type="number" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} placeholder="Leave blank for non-monetary gifts" /></div>
         </div>
-        {can("gifts", "write") && <button className="btn" type="button" disabled={busy} onClick={save}>Save entry</button>}
+        <div style={{ display: "flex", gap: 8 }}>
+          {(editingId ? can("gifts", "edit") : can("gifts", "write")) && <button className="btn" type="button" disabled={busy} onClick={save}>{editingId ? "Update entry" : "Save entry"}</button>}
+          {editingId && <button className="btn secondary" type="button" onClick={cancelEdit}>Cancel edit</button>}
+        </div>
         <ErrorNote msg={err} />
         <div className="note-box">The rep, company, and gift description are always disclosure-only. If you enter an Amount, that value now flows into the Income Statement as "Gift Income" and into the Balance Sheet/Capital Account — leave it blank for non-monetary gifts (samples, stationery, etc.) that shouldn't affect the books. Gifting from pharmaceutical reps to doctors is restricted under India's medical ethics rules (e.g. the Uniform Code for Pharmaceuticals Marketing Practices and NMC's professional-conduct regulations); check current guidance with your professional body if in doubt.</div>
       </div>
@@ -1279,7 +1511,7 @@ function Gifts({ gifts, addGift, removeGift, doctors, can }) {
         <h2>Gifts register</h2>
         {gifts.length === 0 ? <div className="empty">No entries yet.</div> : (
           <table><thead><tr><th>Date</th><th>Rep</th><th>Company</th><th>Gift</th><th>Doctor</th><th className="num">Amount</th><th></th></tr></thead>
-            <tbody>{[...gifts].sort((a, b) => (a.date < b.date ? 1 : -1)).map((g) => (<tr key={g.id}><td>{g.date}</td><td>{g.repName}</td><td>{g.company}</td><td>{g.gift}</td><td>{g.doctorName || "—"}</td><td className="num">{g.amount ? inr(g.amount) : "—"}</td><td>{can("gifts", "delete") && <button className="btn danger small" type="button" onClick={() => remove(g.id)}>Delete</button>}</td></tr>))}</tbody>
+            <tbody>{[...gifts].sort((a, b) => (a.date < b.date ? 1 : -1)).map((g) => (<tr key={g.id}><td>{g.date}</td><td>{g.repName}</td><td>{g.company}</td><td>{g.gift}</td><td>{g.doctorName || "—"}</td><td className="num">{g.amount ? inr(g.amount) : "—"}</td><td style={{ display: "flex", gap: 6 }}>{can("gifts", "edit") && <button className="btn secondary small" type="button" onClick={() => startEdit(g)}>Edit</button>}{can("gifts", "delete") && <button className="btn danger small" type="button" onClick={() => remove(g.id)}>Delete</button>}</td></tr>))}</tbody>
           </table>
         )}
         <CustomExport
@@ -1293,11 +1525,24 @@ function Gifts({ gifts, addGift, removeGift, doctors, can }) {
 }
 
 /* ============================== EXPENSES ============================== */
-function Expenses({ expenses, addExpense, removeExpense, fy, can }) {
+function Expenses({ expenses, addExpense, updateExpense, removeExpense, fy, can }) {
   const blank = { date: todayISO(), category: EXPENSE_CATEGORIES[0], amount: "", narration: "", image: null };
   const [form, setForm] = useState(blank); const [err, setErr] = useState(""); const [busy, setBusy] = useState(false);
-  const save = async () => { setErr(""); if (!form.amount) { setErr("Enter an amount."); return; } setBusy(true); try { await addExpense({ date: form.date, category: form.category, amount: Number(form.amount), narration: form.narration, imageUrl: form.image }); setForm(blank); } catch (e) { setErr(e.message); } setBusy(false); };
-  const remove = async (id) => { try { await removeExpense(id); } catch (e) { setErr(e.message); } };
+  const [editingId, setEditingId] = useState(null);
+  const startEdit = (e) => { setEditingId(e.id); setForm({ date: e.date, category: e.category, amount: String(e.amount), narration: e.narration || "", image: e.image || null }); setErr(""); };
+  const cancelEdit = () => { setEditingId(null); setForm(blank); setErr(""); };
+  const save = async () => {
+    setErr(""); if (!form.amount) { setErr("Enter an amount."); return; }
+    setBusy(true);
+    const payload = { date: form.date, category: form.category, amount: Number(form.amount), narration: form.narration, imageUrl: form.image };
+    try {
+      if (editingId) { await updateExpense(editingId, payload); setEditingId(null); }
+      else { await addExpense(payload); }
+      setForm(blank);
+    } catch (e) { setErr(e.message); }
+    setBusy(false);
+  };
+  const remove = async (id) => { try { await removeExpense(id); if (editingId === id) cancelEdit(); } catch (e) { setErr(e.message); } };
   const range = fyRange(fy);
   const inFY = expenses.filter((e) => e.date >= range.start && e.date <= range.end);
   const byCat = {}; inFY.forEach((e) => { byCat[e.category] = (byCat[e.category] || 0) + e.amount; });
@@ -1305,7 +1550,7 @@ function Expenses({ expenses, addExpense, removeExpense, fy, can }) {
   return (
     <div>
       <div className="card">
-        <h2>New expense</h2>
+        <h2>{editingId ? "Edit expense" : "New expense"}</h2>
         <div className="form-grid">
           <div><label>Date</label><input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /></div>
           <div><label>Category</label><select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>{EXPENSE_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}</select></div>
@@ -1313,7 +1558,10 @@ function Expenses({ expenses, addExpense, removeExpense, fy, can }) {
           <div style={{ gridColumn: "span 2" }}><label>Narration</label><input type="text" style={{ width: "100%" }} value={form.narration} onChange={(e) => setForm({ ...form, narration: e.target.value })} /></div>
         </div>
         <ImageCapture value={form.image} onChange={(img) => setForm({ ...form, image: img })} />
-        {can("expenses", "write") && <button className="btn" style={{ marginTop: 14 }} type="button" disabled={busy} onClick={save}>{busy ? "Saving…" : "Save expense"}</button>}
+        <div style={{ marginTop: 14, display: "flex", gap: 8 }}>
+          {(editingId ? can("expenses", "edit") : can("expenses", "write")) && <button className="btn" type="button" disabled={busy} onClick={save}>{busy ? "Saving…" : editingId ? "Update expense" : "Save expense"}</button>}
+          {editingId && <button className="btn secondary" type="button" onClick={cancelEdit}>Cancel edit</button>}
+        </div>
         <ErrorNote msg={err} />
       </div>
       <div className="card">
@@ -1324,7 +1572,7 @@ function Expenses({ expenses, addExpense, removeExpense, fy, can }) {
         <h2>All expense entries</h2>
         {expenses.length === 0 ? <div className="empty">No expenses logged yet.</div> : (
           <table><thead><tr><th>Date</th><th>Category</th><th>Narration</th><th className="num">Amount</th><th>Photo</th><th></th></tr></thead>
-            <tbody>{[...expenses].sort((a, b) => (a.date < b.date ? 1 : -1)).map((e) => (<tr key={e.id}><td>{e.date}</td><td>{e.category}</td><td>{e.narration}</td><td className="num">{inr(e.amount)}</td><td>{e.image ? "📎" : "—"}</td><td>{can("expenses", "delete") && <button className="btn danger small" type="button" onClick={() => remove(e.id)}>Delete</button>}</td></tr>))}</tbody>
+            <tbody>{[...expenses].sort((a, b) => (a.date < b.date ? 1 : -1)).map((e) => (<tr key={e.id}><td>{e.date}</td><td>{e.category}</td><td>{e.narration}</td><td className="num">{inr(e.amount)}</td><td>{e.image ? "📎" : "—"}</td><td style={{ display: "flex", gap: 6 }}>{can("expenses", "edit") && <button className="btn secondary small" type="button" onClick={() => startEdit(e)}>Edit</button>}{can("expenses", "delete") && <button className="btn danger small" type="button" onClick={() => remove(e.id)}>Delete</button>}</td></tr>))}</tbody>
           </table>
         )}
         <CustomExport
@@ -1338,7 +1586,7 @@ function Expenses({ expenses, addExpense, removeExpense, fy, can }) {
 }
 
 /* ============================== FIXED ASSETS ============================== */
-function FixedAssets({ assets, addAsset, removeAsset, fy, can }) {
+function FixedAssets({ assets, addAsset, updateAsset, removeAsset, fy, can }) {
   const { call } = useApi();
   const blank = { name: "", block: BLOCKS[0].name, rate: BLOCKS[0].rate, purchaseDate: todayISO(), cost: "" };
   const [form, setForm] = useState(blank); const [err, setErr] = useState(""); const [busy, setBusy] = useState(false);
@@ -1346,13 +1594,26 @@ function FixedAssets({ assets, addAsset, removeAsset, fy, can }) {
 
   useEffect(() => { call(`/assets/depreciation?fy=${fy}`).then((d) => setDep({ rows: (d.rows || []).map((r) => ({ ...mapAsset(r), ...r })), totalDep: Number(d.totalDep) })).catch(() => {}); }, [call, fy, assets]);
 
-  const add = async () => { setErr(""); if (!form.name.trim() || !form.cost) { setErr("Enter a description and cost."); return; } setBusy(true); try { await addAsset({ ...form, cost: Number(form.cost) }); setForm(blank); } catch (e) { setErr(e.message); } setBusy(false); };
-  const remove = async (id) => { try { await removeAsset(id); } catch (e) { setErr(e.message); } };
+  const [editingId, setEditingId] = useState(null);
+  const startEdit = (a) => { setEditingId(a.id); setForm({ name: a.name, block: a.block, rate: a.rate, purchaseDate: a.purchaseDate, cost: String(a.cost) }); setErr(""); };
+  const cancelEdit = () => { setEditingId(null); setForm(blank); setErr(""); };
+  const add = async () => {
+    setErr(""); if (!form.name.trim() || !form.cost) { setErr("Enter a description and cost."); return; }
+    setBusy(true);
+    const payload = { ...form, cost: Number(form.cost) };
+    try {
+      if (editingId) { await updateAsset(editingId, payload); setEditingId(null); }
+      else { await addAsset(payload); }
+      setForm(blank);
+    } catch (e) { setErr(e.message); }
+    setBusy(false);
+  };
+  const remove = async (id) => { try { await removeAsset(id); if (editingId === id) cancelEdit(); } catch (e) { setErr(e.message); } };
 
   return (
     <div>
       <div className="card">
-        <h2>Add asset (CAPEX)</h2>
+        <h2>{editingId ? "Edit asset" : "Add asset (CAPEX)"}</h2>
         <div className="form-grid">
           <div><label>Description</label><input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. ECG machine" /></div>
           <div><label>Block of assets</label><select value={form.block} onChange={(e) => { const b = BLOCKS.find((x) => x.name === e.target.value); setForm({ ...form, block: b.name, rate: b.rate }); }}>{BLOCKS.map((b) => <option key={b.name} value={b.name}>{b.name} ({b.rate}%)</option>)}</select></div>
@@ -1360,7 +1621,10 @@ function FixedAssets({ assets, addAsset, removeAsset, fy, can }) {
           <div><label>Date put to use</label><input type="date" value={form.purchaseDate} onChange={(e) => setForm({ ...form, purchaseDate: e.target.value })} /></div>
           <div><label>Cost (₹)</label><input type="number" value={form.cost} onChange={(e) => setForm({ ...form, cost: e.target.value })} /></div>
         </div>
-        {can("assets", "write") && <button className="btn" type="button" disabled={busy} onClick={add}>Add to register</button>}
+        <div style={{ display: "flex", gap: 8 }}>
+          {(editingId ? can("assets", "edit") : can("assets", "write")) && <button className="btn" type="button" disabled={busy} onClick={add}>{editingId ? "Update asset" : "Add to register"}</button>}
+          {editingId && <button className="btn secondary" type="button" onClick={cancelEdit}>Cancel edit</button>}
+        </div>
         <ErrorNote msg={err} />
       </div>
       <div className="card">
@@ -1371,7 +1635,7 @@ function FixedAssets({ assets, addAsset, removeAsset, fy, can }) {
             <tbody>{dep.rows.map((r) => (
               <tr key={r.id}><td>{r.name}</td><td>{r.block}</td><td className="num">{r.rate}%</td><td className="num">{inr(r.cost)}</td>
                 <td className="num">{r.applicable ? inr(r.wdvStart) : "—"}</td><td className="num">{r.applicable ? inr(r.dep) : "—"}</td><td className="num">{r.applicable ? inr(r.wdvEnd) : "—"}</td>
-                <td>{can("assets", "delete") && <button className="btn danger small" type="button" onClick={() => remove(r.id)}>Delete</button>}</td></tr>
+                <td style={{ display: "flex", gap: 6 }}>{can("assets", "edit") && <button className="btn secondary small" type="button" onClick={() => startEdit(r)}>Edit</button>}{can("assets", "delete") && <button className="btn danger small" type="button" onClick={() => remove(r.id)}>Delete</button>}</td></tr>
             ))}</tbody>
             <tfoot><tr style={{ fontWeight: 700 }}><td colSpan={5}>Total depreciation for FY {fy}</td><td className="num">{inr(dep.totalDep)}</td><td colSpan={2}></td></tr></tfoot>
           </table>
@@ -1420,11 +1684,11 @@ function FinancialStatements({ fy, settings, can }) {
       { label: "Total Expense", amount: customIncome.totalExpense },
       { label: customIncome.netProfit >= 0 ? "Net Profit" : "Net Loss", amount: Math.abs(customIncome.netProfit) },
     ];
-    win.innerHTML = `<h2>${settings.clinicName} — Income Statement</h2>
+    win.innerHTML = `<h2>${escapeHtml(settings.clinicName)} — Income Statement</h2>
       <p style="color:#5B6B69;font-size:12px;">${customFrom} to ${customTo}</p>
       <table style="width:100%;border-collapse:collapse;font-size:12px;">
         <thead><tr><th style="text-align:left;border-bottom:2px solid #C9A227;padding:5px 6px;">Head</th><th style="text-align:right;border-bottom:2px solid #C9A227;padding:5px 6px;">Amount</th></tr></thead>
-        <tbody>${rows.map((r) => `<tr><td style="padding:4px 6px;">${r.label}</td><td style="padding:4px 6px;text-align:right;">${inr(r.amount)}</td></tr>`).join("")}</tbody>
+        <tbody>${rows.map((r) => `<tr><td style="padding:4px 6px;">${escapeHtml(r.label)}</td><td style="padding:4px 6px;text-align:right;">${inr(r.amount)}</td></tr>`).join("")}</tbody>
       </table>`;
     document.body.classList.add("printing-custom");
     window.print();
@@ -1500,15 +1764,16 @@ function FinancialStatements({ fy, settings, can }) {
         <h2>Balance Sheet — as of {bs.asOf}</h2>
         <table><thead><tr><th>Liabilities & Capital</th><th className="num">Amount</th><th>Assets</th><th className="num">Amount</th></tr></thead>
           <tbody>
-            <tr><td>Capital Account</td><td className="num">{inr(bs.capital.closingCapital)}</td><td>Cash & Bank</td><td className="num">{inr(bs.assets.cashBank)}</td></tr>
-            <tr><td></td><td></td><td>Sundry Debtors (patient dues)</td><td className="num">{inr(bs.assets.debtors)}</td></tr>
+            <tr><td>Unsecured Loans</td><td className="num">{inr(bs.liabilities.unsecuredLoan)}</td><td>Cash & Bank</td><td className="num">{inr(bs.assets.cashBank)}</td></tr>
+            <tr><td>Capital Account</td><td className="num">{inr(bs.capital.closingCapital)}</td><td>Sundry Debtors (patient dues)</td><td className="num">{inr(bs.assets.debtors)}</td></tr>
+            <tr><td></td><td></td><td>Security Deposits Given</td><td className="num">{inr(bs.assets.securityDeposit)}</td></tr>
             <tr><td></td><td></td><td>Fixed Assets (net of depreciation)</td><td className="num">{inr(bs.assets.fixedAssetsNet)}</td></tr>
-            <tr style={{ fontWeight: 700, borderTop: "2px solid var(--accent)" }}><td>Total</td><td className="num">{inr(bs.capital.closingCapital)}</td><td>Total</td><td className="num">{inr(bs.assets.total)}</td></tr>
+            <tr style={{ fontWeight: 700, borderTop: "2px solid var(--accent)" }}><td>Total</td><td className="num">{inr(bs.liabilities.unsecuredLoan + bs.capital.closingCapital)}</td><td>Total</td><td className="num">{inr(bs.assets.total)}</td></tr>
           </tbody>
         </table>
-        <div style={{ marginTop: 10 }}><span className={"balance-tag " + (bs.ties ? "ok" : "bad")}>{bs.ties ? "Balance sheet ties out" : `Off by ${inr(Math.abs(bs.capital.closingCapital - bs.assets.total))}`}</span></div>
-        {can("statements", "export") && <ExportRow onExcel={() => exportExcel("balance-sheet", { BalanceSheet: [{ Capital: bs.capital.closingCapital, CashBank: bs.assets.cashBank, Debtors: bs.assets.debtors, FixedAssetsNet: bs.assets.fixedAssetsNet, TotalAssets: bs.assets.total }] })} />}
-        <div className="note-box">Model assumes the clinic settles expenses directly out of collections (no supplier credit tracked), so Assets equal Capital by construction. Add a Sundry Creditors flow if medicine purchases start going on credit.</div>
+        <div style={{ marginTop: 10 }}><span className={"balance-tag " + (bs.ties ? "ok" : "bad")}>{bs.ties ? "Balance sheet ties out" : `Off by ${inr(Math.abs(bs.liabilities.unsecuredLoan + bs.capital.closingCapital - bs.assets.total))}`}</span></div>
+        {can("statements", "export") && <ExportRow onExcel={() => exportExcel("balance-sheet", { BalanceSheet: [{ UnsecuredLoans: bs.liabilities.unsecuredLoan, Capital: bs.capital.closingCapital, CashBank: bs.assets.cashBank, Debtors: bs.assets.debtors, SecurityDeposits: bs.assets.securityDeposit, FixedAssetsNet: bs.assets.fixedAssetsNet, TotalAssets: bs.assets.total }] })} />}
+        <div className="note-box">Model assumes the clinic settles expenses directly out of collections (no supplier credit tracked), so Liabilities + Capital equal Assets by construction. Add a Sundry Creditors flow if medicine purchases start going on credit.</div>
       </div>
     </div>
   );
@@ -1563,7 +1828,7 @@ function AccessReport({ can }) {
 }
 
 /* ============================== SETTINGS ============================== */
-function SettingsPage({ settings, updateSettings, session, origin, capital, addCapital, removeCapital, can }) {
+function SettingsPage({ settings, updateSettings, session, origin, capital, addCapital, removeCapital, loans, deposits, addOtherBalance, updateOtherBalance, removeOtherBalance, can }) {
   const [form, setForm] = useState(settings);
   useEffect(() => setForm(settings), [settings]);
   const [err, setErr] = useState(""); const [busy, setBusy] = useState(false);
@@ -1604,12 +1869,75 @@ function SettingsPage({ settings, updateSettings, session, origin, capital, addC
         </table>
       </div>
 
+      <LoanDepositSection
+        title="Unsecured loans" category="unsecured_loan" types={["Taken", "Repaid"]} partyLabel="Lender's name"
+        items={loans} addOtherBalance={addOtherBalance} updateOtherBalance={updateOtherBalance} removeOtherBalance={removeOtherBalance} can={can}
+        note='Shows as "Unsecured Loans" on the liability side of the Balance Sheet. "Taken" adds to cash and the loan balance; "Repaid" reduces both.'
+      />
+      <LoanDepositSection
+        title="Security deposits given" category="security_deposit" types={["Given", "Refunded"]} partyLabel="Given to (e.g. property owner)"
+        items={deposits} addOtherBalance={addOtherBalance} updateOtherBalance={updateOtherBalance} removeOtherBalance={removeOtherBalance} can={can}
+        note='Shows as a Current Asset on the Balance Sheet. "Given" moves the amount out of cash and into this deposit asset; "Refunded" moves it back.'
+      />
+
       <div className="card">
         <h2>Connection</h2>
         <p style={{ fontSize: 13, color: "var(--ink-soft)" }}>API server: <code>{origin}</code></p>
         <p style={{ fontSize: 13, color: "var(--ink-soft)" }}>Logged in as {session.name} ({session.userId}) — role: {session.role}</p>
         <div className="note-box">{session.role === "Admin" ? "Manage staff accounts and permissions under \"User Approvals\" in the sidebar." : "New staff accounts need an Admin to approve them and set access under \"User Approvals\" before they can log in."} Same user ID and password work on both the web and mobile views of this app, since both call the same API server.</div>
       </div>
+    </div>
+  );
+}
+
+function LoanDepositSection({ title, category, types, partyLabel, items, addOtherBalance, updateOtherBalance, removeOtherBalance, can, note }) {
+  const blank = { txnType: types[0], partyName: "", amount: "", date: todayISO(), note: "" };
+  const [form, setForm] = useState(blank);
+  const [editingId, setEditingId] = useState(null);
+  const [err, setErr] = useState("");
+
+  const startEdit = (item) => { setEditingId(item.id); setForm({ txnType: item.txnType, partyName: item.partyName || "", amount: String(item.amount), date: item.date, note: item.note || "" }); setErr(""); };
+  const cancelEdit = () => { setEditingId(null); setForm(blank); setErr(""); };
+  const save = async () => {
+    setErr(""); if (!form.amount) { setErr("Enter an amount."); return; }
+    const payload = { category, ...form, amount: Number(form.amount) };
+    try {
+      if (editingId) { await updateOtherBalance(editingId, payload); setEditingId(null); }
+      else { await addOtherBalance(payload); }
+      setForm(blank);
+    } catch (e) { setErr(e.message); }
+  };
+  const remove = async (id) => { try { await removeOtherBalance(id, category); if (editingId === id) cancelEdit(); } catch (e) { setErr(e.message); } };
+
+  const balance = items.reduce((s, x) => s + (x.txnType === types[0] ? x.amount : -x.amount), 0);
+
+  return (
+    <div className="card">
+      <h2>{title} — current balance: {inr(balance)}</h2>
+      <div className="form-grid">
+        <div><label>Date</label><input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /></div>
+        <div><label>Type</label><select value={form.txnType} onChange={(e) => setForm({ ...form, txnType: e.target.value })}>{types.map((t) => <option key={t} value={t}>{t}</option>)}</select></div>
+        <div><label>{partyLabel}</label><input type="text" value={form.partyName} onChange={(e) => setForm({ ...form, partyName: e.target.value })} /></div>
+        <div><label>Amount (₹)</label><input type="number" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} /></div>
+        <div><label>Note</label><input type="text" value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} /></div>
+      </div>
+      <div style={{ display: "flex", gap: 8 }}>
+        {(editingId ? can("statements", "edit") : can("statements", "write")) && <button className="btn" type="button" onClick={save}>{editingId ? "Update entry" : "Save entry"}</button>}
+        {editingId && <button className="btn secondary" type="button" onClick={cancelEdit}>Cancel edit</button>}
+      </div>
+      <ErrorNote msg={err} />
+      {items.length > 0 && (
+        <table style={{ marginTop: 14 }}><thead><tr><th>Date</th><th>Type</th><th>{partyLabel}</th><th className="num">Amount</th><th>Note</th><th></th></tr></thead>
+          <tbody>{[...items].sort((a, b) => (a.date < b.date ? 1 : -1)).map((x) => (
+            <tr key={x.id}><td>{x.date}</td><td>{x.txnType}</td><td>{x.partyName}</td><td className="num">{inr(x.amount)}</td><td>{x.note}</td>
+              <td style={{ display: "flex", gap: 6 }}>
+                {can("statements", "edit") && <button className="btn secondary small" type="button" onClick={() => startEdit(x)}>Edit</button>}
+                {can("statements", "delete") && <button className="btn danger small" type="button" onClick={() => remove(x.id)}>Delete</button>}
+              </td></tr>
+          ))}</tbody>
+        </table>
+      )}
+      <div className="note-box">{note}</div>
     </div>
   );
 }
