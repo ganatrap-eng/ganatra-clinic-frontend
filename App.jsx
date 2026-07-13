@@ -625,6 +625,7 @@ export default function App() {
   const addCase = useCallback(async (body) => { const r = await call("/cases", { method: "POST", body }); const doc = doctors.find((d) => d.id === body.doctorId); setCases((p) => [{ ...mapCase(r), doctorName: doc?.name }, ...p]); return r; }, [call, doctors]);
   const removeCase = useCallback(async (id) => { await call(`/cases/${id}`, { method: "DELETE" }); setCases((p) => p.filter((x) => x.id !== id)); }, [call]);
   const addCollection = useCallback(async (body) => { const r = await call("/collections", { method: "POST", body }); setCollections((p) => [mapCollection(r), ...p]); }, [call]);
+  const updateCollection = useCallback(async (id, body) => { const r = await call(`/collections/${id}`, { method: "PUT", body }); setCollections((p) => p.map((x) => (x.id === id ? mapCollection(r) : x))); }, [call]);
   const removeCollection = useCallback(async (id) => { await call(`/collections/${id}`, { method: "DELETE" }); setCollections((p) => p.filter((x) => x.id !== id)); }, [call]);
   const addDoctorPay = useCallback(async (body) => { const r = await call("/doctor-pays", { method: "POST", body }); const doc = doctors.find((d) => d.id === body.doctorId); setDoctorPays((p) => [{ ...mapDoctorPay(r), doctorName: doc?.name }, ...p]); }, [call, doctors]);
   const removeDoctorPay = useCallback(async (id) => { await call(`/doctor-pays/${id}`, { method: "DELETE" }); setDoctorPays((p) => p.filter((x) => x.id !== id)); }, [call]);
@@ -737,7 +738,7 @@ export default function App() {
                 {view === "dashboard" && <Dashboard settings={settings} collections={collections} referrals={referrals} expenses={expenses} doctorPays={doctorPays} fy={fy} />}
                 {view === "cases" && can("cases", "view") && <CaseRecords cases={cases} addCase={addCase} removeCase={removeCase} doctors={doctors} can={can} />}
                 {view === "patients" && can("cases", "view") && <PatientHistory can={can} />}
-                {view === "collections" && can("collections", "view") && <Collections collections={collections} addCollection={addCollection} removeCollection={removeCollection} cases={cases} fy={fy} can={can} />}
+                {view === "collections" && can("collections", "view") && <Collections collections={collections} addCollection={addCollection} updateCollection={updateCollection} removeCollection={removeCollection} cases={cases} fy={fy} can={can} />}
                 {view === "doctors" && can("doctorPay", "view") && <DoctorShifts doctors={doctors} addDoctor={addDoctor} removeDoctor={removeDoctor} doctorPays={doctorPays} addDoctorPay={addDoctorPay} removeDoctorPay={removeDoctorPay} can={can} />}
                 {view === "referrals" && can("referrals", "view") && <Referrals referrals={referrals} addReferral={addReferral} removeReferral={removeReferral} fy={fy} can={can} />}
                 {view === "gifts" && can("gifts", "view") && <Gifts gifts={gifts} addGift={addGift} removeGift={removeGift} doctors={doctors} can={can} />}
@@ -1037,7 +1038,7 @@ function PatientHistory({ can }) {
 }
 
 /* ============================== COLLECTIONS ============================== */
-function Collections({ collections, addCollection, removeCollection, cases, fy, can }) {
+function Collections({ collections, addCollection, updateCollection, removeCollection, cases, fy, can }) {
   const { call } = useApi();
   const blank = { caseId: "", caseNo: "", patientName: "", phone: "", date: todayISO(), amountDue: "", amountCollected: "", mode: "Cash", image: null };
   const [form, setForm] = useState(blank);
@@ -1055,22 +1056,31 @@ function Collections({ collections, addCollection, removeCollection, cases, fy, 
       })).catch(() => {});
   }, [call, fy]); // eslint-disable-line
 
+  const [editingId, setEditingId] = useState(null);
   const pickCase = (caseId) => { const c = cases.find((x) => x.id === caseId); setForm({ ...form, caseId, caseNo: c ? c.caseNo : "", patientName: c ? c.patientName : form.patientName, phone: c ? c.phone : form.phone }); };
+  const startEdit = (c) => {
+    setEditingId(c.id);
+    setForm({ caseId: c.caseId || "", caseNo: c.caseNo || "", patientName: c.patientName, phone: c.phone || "", date: c.date, amountDue: String(c.amountDue), amountCollected: String(c.amountCollected), mode: c.mode || "Cash", image: c.image || null });
+    setErr("");
+  };
+  const cancelEdit = () => { setEditingId(null); setForm(blank); setErr(""); };
   const save = async () => {
     setErr(""); if (!form.patientName.trim() || form.amountDue === "") { setErr("Enter patient name and amount due."); return; }
     setBusy(true);
+    const payload = { caseId: form.caseId || null, caseNo: form.caseNo || null, patientName: form.patientName, phone: form.phone, date: form.date, amountDue: Number(form.amountDue), amountCollected: Number(form.amountCollected) || 0, mode: form.mode, imageUrl: form.image };
     try {
-      await addCollection({ caseId: form.caseId || null, caseNo: form.caseNo || null, patientName: form.patientName, phone: form.phone, date: form.date, amountDue: Number(form.amountDue), amountCollected: Number(form.amountCollected) || 0, mode: form.mode, imageUrl: form.image });
+      if (editingId) { await updateCollection(editingId, payload); setEditingId(null); }
+      else { await addCollection(payload); }
       setForm(blank);
     } catch (e) { setErr(e.message); }
     setBusy(false);
   };
-  const remove = async (id) => { try { await removeCollection(id); } catch (e) { setErr(e.message); } };
+  const remove = async (id) => { try { await removeCollection(id); if (editingId === id) cancelEdit(); } catch (e) { setErr(e.message); } };
 
   return (
     <div>
       <div className="card">
-        <h2>New collection entry</h2>
+        <h2>{editingId ? "Edit collection entry" : "New collection entry"}</h2>
         <div className="form-grid">
           <div><label>Linked case no.</label><select value={form.caseId} onChange={(e) => pickCase(e.target.value)}><option value="">— Not linked —</option>{cases.map((c) => <option key={c.id} value={c.id}>{c.caseNo} — {c.patientName}</option>)}</select></div>
           <div><label>Patient name</label><input type="text" value={form.patientName} onChange={(e) => setForm({ ...form, patientName: e.target.value })} /></div>
@@ -1081,7 +1091,12 @@ function Collections({ collections, addCollection, removeCollection, cases, fy, 
           <div><label>Mode</label><select value={form.mode} onChange={(e) => setForm({ ...form, mode: e.target.value })}>{COLLECTION_MODES.map((m) => <option key={m} value={m}>{m}</option>)}</select></div>
         </div>
         <ImageCapture value={form.image} onChange={(img) => setForm({ ...form, image: img })} />
-        {can("collections", "write") && <button className="btn" style={{ marginTop: 14 }} type="button" disabled={busy} onClick={save}>{busy ? "Saving…" : "Save collection entry"}</button>}
+        <div style={{ marginTop: 14, display: "flex", gap: 8 }}>
+          {(editingId ? can("collections", "edit") : can("collections", "write")) && (
+            <button className="btn" type="button" disabled={busy} onClick={save}>{busy ? "Saving…" : editingId ? "Update collection entry" : "Save collection entry"}</button>
+          )}
+          {editingId && <button className="btn secondary" type="button" onClick={cancelEdit}>Cancel edit</button>}
+        </div>
         <ErrorNote msg={err} />
       </div>
       <div className="card">
@@ -1093,7 +1108,7 @@ function Collections({ collections, addCollection, removeCollection, cases, fy, 
               <tr key={c.id}><td>{c.date}</td><td>{c.caseNo || "—"}</td><td>{c.patientName}</td><td>{c.phone}</td>
                 <td className="num">{inr(c.amountDue)}</td><td className="num">{inr(c.amountCollected)}</td>
                 <td className="num" style={{ color: c.balance > 0 ? "var(--expense)" : "var(--income)" }}>{inr(c.balance)}</td>
-                <td>{c.mode}</td><td>{can("collections", "delete") && <button className="btn danger small" type="button" onClick={() => remove(c.id)}>Delete</button>}</td></tr>
+                <td>{c.mode}</td><td style={{ display: "flex", gap: 6 }}>{can("collections", "edit") && <button className="btn secondary small" type="button" onClick={() => startEdit(c)}>Edit</button>}{can("collections", "delete") && <button className="btn danger small" type="button" onClick={() => remove(c.id)}>Delete</button>}</td></tr>
             ))}</tbody>
           </table>
         )}
