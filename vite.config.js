@@ -5,6 +5,8 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
+      // The plain "xlsx" entry point isn't browser-safe; point Vite at
+      // SheetJS's bundled UMD build instead, which has no Node dependencies.
       xlsx: "xlsx/dist/xlsx.full.min.js",
     },
   },
