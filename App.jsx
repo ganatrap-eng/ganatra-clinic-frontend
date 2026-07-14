@@ -117,6 +117,45 @@ function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
 }
 
+/** Reusable column sorting: useSortableRows(rows, columns, defaultKey)
+ *  takes a { key: accessorFn } map declared upfront (so sorting is correct
+ *  from the very first render) and returns the sorted array plus a <Th>
+ *  component for clickable, arrow-indicating headers. */
+function useSortableRows(rows, columns, defaultKey, defaultDir = "asc") {
+  const [sortKey, setSortKey] = useState(defaultKey);
+  const [sortDir, setSortDir] = useState(defaultDir);
+
+  const sorted = useMemo(() => {
+    const acc = columns[sortKey];
+    if (!acc) return rows;
+    const withVals = rows.map((r) => ({ r, v: acc(r) }));
+    withVals.sort((a, b) => {
+      const av = a.v, bv = b.v;
+      let cmp;
+      if (typeof av === "number" && typeof bv === "number") cmp = av - bv;
+      else cmp = String(av ?? "").localeCompare(String(bv ?? ""), undefined, { numeric: true, sensitivity: "base" });
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+    return withVals.map((x) => x.r);
+  }, [rows, columns, sortKey, sortDir]);
+
+  const toggleSort = (key) => {
+    if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else { setSortKey(key); setSortDir("asc"); }
+  };
+
+  const Th = ({ sortKeyName, children, className }) => {
+    const active = sortKey === sortKeyName;
+    return (
+      <th className={className} onClick={() => toggleSort(sortKeyName)} style={{ cursor: "pointer", userSelect: "none", whiteSpace: "nowrap" }}>
+        {children}{active ? (sortDir === "asc" ? " ▲" : " ▼") : <span style={{ opacity: 0.25 }}> ⇅</span>}
+      </th>
+    );
+  };
+
+  return { sorted, Th };
+}
+
 function ExportRow({ onExcel }) {
   return (
     <div className="export-row no-print">
@@ -942,6 +981,8 @@ function CaseRecords({ cases, addCase, updateCase, removeCase, doctors, can }) {
   };
   const remove = async (id) => { try { await removeCase(id); if (editingId === id) cancelEdit(); } catch (e) { setErr(e.message); } };
   const medValue = (c) => (c.medicines || []).reduce((s, m) => s + m.qty * m.price, 0);
+  const caseColumns = { caseNo: (c) => c.caseNo, date: (c) => c.date, patientName: (c) => c.patientName, doctorName: (c) => c.doctorName || "", shift: (c) => c.shift || "", briefHistory: (c) => c.briefHistory || "", medValue: (c) => medValue(c) };
+  const { sorted: sortedCases, Th: CaseTh } = useSortableRows(cases, caseColumns, "date", "desc");
 
   // ---- Bulk upload: download a template, then parse a filled-in copy ----
   const TEMPLATE_HEADERS = ["Date (YYYY-MM-DD)", "Patient Name", "Phone", "Doctor", "Shift (Morning/Evening)", "Brief Medical History", "Medicine Name", "Quantity", "Indicative Unit Price"];
@@ -1079,8 +1120,8 @@ function CaseRecords({ cases, addCase, updateCase, removeCase, doctors, can }) {
         <h2>Case register</h2>
         {cases.length === 0 ? <div className="empty">No case papers recorded yet.</div> : (
           <table>
-            <thead><tr><th>Case No.</th><th>Date</th><th>Patient</th><th>Doctor</th><th>Shift</th><th>History</th><th className="num">Meds Value</th><th>Photo</th><th></th></tr></thead>
-            <tbody>{[...cases].sort((a, b) => (a.date < b.date ? 1 : -1)).map((c) => (
+            <thead><tr><CaseTh sortKeyName="caseNo">Case No.</CaseTh><CaseTh sortKeyName="date">Date</CaseTh><CaseTh sortKeyName="patientName">Patient</CaseTh><CaseTh sortKeyName="doctorName">Doctor</CaseTh><CaseTh sortKeyName="shift">Shift</CaseTh><CaseTh sortKeyName="briefHistory">History</CaseTh><CaseTh sortKeyName="medValue" className="num">Meds Value</CaseTh><th>Photo</th><th></th></tr></thead>
+            <tbody>{sortedCases.map((c) => (
               <tr key={c.id}><td>{c.caseNo}</td><td>{c.date}</td><td>{c.patientName}</td><td>{c.doctorName || "—"}</td>
                 <td><span className={"pill " + (c.shift || "").toLowerCase()}>{c.shift}</span></td>
                 <td style={{ maxWidth: 180 }}>{c.briefHistory}</td><td className="num">{inr(medValue(c))}</td>
