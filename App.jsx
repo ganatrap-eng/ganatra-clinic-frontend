@@ -846,24 +846,89 @@ function periodSummary(collections, expenses, start, end) {
   return { modeTotals, outstanding, expenseTotal, netProfit, collectedTotal };
 }
 
-function PeriodCard({ title, summary }) {
+function formatDate(iso) {
+  if (!iso) return "";
+  const d = new Date(iso + "T00:00:00");
+  return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+function PeriodCard({ title, summary, start, end, onDrill }) {
+  const Row = ({ label, value, kind, mode, bold, borderTop, color }) => (
+    <tr
+      style={{ fontWeight: bold ? 700 : 400, borderTop: borderTop ? `${borderTop} solid var(--border)` : undefined, cursor: "pointer" }}
+      onClick={() => onDrill({ kind, mode, start, end, label: title })}
+    >
+      <td style={{ textDecoration: "underline", textDecorationStyle: "dotted", textDecorationColor: "var(--ink-soft)" }}>{label}</td>
+      <td className="num" style={{ color }}>{inr(value)}</td>
+    </tr>
+  );
   return (
     <div className="card period-card">
       <h2>{title}</h2>
       <table>
         <tbody>
           {COLLECTION_MODES.map((m) => (
-            <tr key={m}><td>{m}</td><td className="num">{inr(summary.modeTotals[m] || 0)}</td></tr>
+            <Row key={m} label={m} value={summary.modeTotals[m] || 0} kind="mode" mode={m} />
           ))}
-          <tr style={{ fontWeight: 700, borderTop: "1px solid var(--border)" }}><td>Collected total</td><td className="num">{inr(summary.collectedTotal)}</td></tr>
-          <tr><td>+ Outstanding due</td><td className="num">{inr(summary.outstanding)}</td></tr>
-          <tr><td>− Expenses</td><td className="num" style={{ color: "var(--expense)" }}>{inr(summary.expenseTotal)}</td></tr>
+          <Row label="Collected total" value={summary.collectedTotal} kind="collected" bold borderTop="1px" />
+          <Row label="+ Outstanding due" value={summary.outstanding} kind="outstanding" />
+          <Row label="− Expenses" value={summary.expenseTotal} kind="expenses" color="var(--expense)" />
           <tr style={{ fontWeight: 700, borderTop: "2px solid var(--accent)" }}>
             <td>Net Profit</td>
             <td className="num" style={{ color: summary.netProfit >= 0 ? "var(--income)" : "var(--expense)" }}>{inr(summary.netProfit)}</td>
           </tr>
         </tbody>
       </table>
+      <div style={{ fontSize: 10.5, color: "var(--ink-soft)", marginTop: 8 }}>Click any row for a detailed, exportable report.</div>
+    </div>
+  );
+}
+
+/** The drill-down report panel: shows the actual records behind whatever
+ *  row was clicked, with its own Excel and PDF export. */
+function DrillDownPanel({ drill, onClose }) {
+  if (!drill) return null;
+  const isExpense = drill.kind === "expenses";
+  const columns = isExpense
+    ? [{ label: "Date", value: (r) => r.date }, { label: "Category", value: (r) => r.category }, { label: "Narration", value: (r) => r.narration }, { label: "Amount", value: (r) => inr(r.amount) }]
+    : [{ label: "Date", value: (r) => r.date }, { label: "Case No.", value: (r) => r.caseNo || "—" }, { label: "Patient", value: (r) => r.patientName }, { label: "Mode", value: (r) => r.mode }, { label: "Due", value: (r) => inr(r.amountDue) }, { label: "Collected", value: (r) => inr(r.amountCollected) }, { label: "Balance", value: (r) => inr(r.balance) }];
+  const total = isExpense ? drill.rows.reduce((s, r) => s + Number(r.amount || 0), 0) : drill.rows.reduce((s, r) => s + Number(r.amountCollected || 0), 0);
+
+  const doExcel = () => exportExcel(`drilldown-${drill.title.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`, {
+    Detail: drill.rows.map((r) => Object.fromEntries(columns.map((c) => [c.label, c.value(r)]))),
+  });
+  const doPrint = () => {
+    const win = document.getElementById("print-root");
+    if (!win) { window.print(); return; }
+    const rowsHtml = drill.rows.map((r) => `<tr>${columns.map((c) => `<td>${escapeHtml(c.value(r))}</td>`).join("")}</tr>`).join("");
+    win.innerHTML = `
+      <h2>${escapeHtml(drill.title)}</h2>
+      <p style="color:#5B6B69;font-size:12px;">${drill.rows.length} record(s) — total ${inr(total)}</p>
+      <table style="width:100%;border-collapse:collapse;font-size:12px;">
+        <thead><tr>${columns.map((c) => `<th style="text-align:left;border-bottom:2px solid #C9A227;padding:5px 6px;">${escapeHtml(c.label)}</th>`).join("")}</tr></thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>`;
+    document.body.classList.add("printing-custom");
+    window.print();
+    setTimeout(() => { document.body.classList.remove("printing-custom"); win.innerHTML = ""; }, 300);
+  };
+
+  return (
+    <div className="card" style={{ borderColor: "var(--accent)", borderWidth: 2 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+        <h2>{drill.title} — {drill.rows.length} record(s), total {inr(total)}</h2>
+        <button className="btn secondary small no-print" type="button" onClick={onClose}>✕ Close</button>
+      </div>
+      {drill.rows.length === 0 ? <div className="empty">No records in this range.</div> : (
+        <table>
+          <thead><tr>{columns.map((c) => <th key={c.label} className={c.label === "Amount" || c.label === "Due" || c.label === "Collected" || c.label === "Balance" ? "num" : ""}>{c.label}</th>)}</tr></thead>
+          <tbody>{drill.rows.map((r, i) => (<tr key={i}>{columns.map((c) => <td key={c.label} className={c.label === "Amount" || c.label === "Due" || c.label === "Collected" || c.label === "Balance" ? "num" : ""}>{c.value(r)}</td>)}</tr>))}</tbody>
+        </table>
+      )}
+      <div className="export-row no-print">
+        <button className="btn secondary small" type="button" onClick={doExcel}>⬇ Export Excel</button>
+        <button className="btn secondary small" type="button" onClick={doPrint}>⎙ Export PDF</button>
+      </div>
     </div>
   );
 }
@@ -872,11 +937,13 @@ function Dashboard({ settings, collections, referrals, expenses, doctorPays, fy 
   const { call } = useApi();
   const [income, setIncome] = useState(null);
   useEffect(() => { call(`/statements/income?fy=${fy}`).then(setIncome).catch(() => setIncome(null)); }, [call, fy]);
+  const [drill, setDrill] = useState(null);
 
   const t = todayISO();
   const yest = (() => { const d = new Date(); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10); })();
   const weekStart = (() => { const d = new Date(); d.setDate(d.getDate() - 6); return d.toISOString().slice(0, 10); })();
   const monthStart = t.slice(0, 8) + "01";
+  const monthLabel = new Date(t + "T00:00:00").toLocaleDateString("en-IN", { month: "long", year: "numeric" });
   const range = fyRange(fy);
 
   const todaySummary = periodSummary(collections, expenses, t, t);
@@ -884,6 +951,18 @@ function Dashboard({ settings, collections, referrals, expenses, doctorPays, fy 
   const weekSummary = periodSummary(collections, expenses, weekStart, t);
   const monthSummary = periodSummary(collections, expenses, monthStart, t);
   const yearSummary = periodSummary(collections, expenses, range.start, range.end);
+
+  const openDrill = ({ kind, mode, start, end, label }) => {
+    if (kind === "expenses") {
+      setDrill({ title: `Expenses — ${label}`, kind: "expenses", rows: expenses.filter((e) => e.date >= start && e.date <= end) });
+      return;
+    }
+    let rows = collections.filter((c) => c.date >= start && c.date <= end);
+    let title = `All Collections — ${label}`;
+    if (kind === "mode") { rows = rows.filter((c) => (c.mode || "Other") === mode); title = `${mode} Collections — ${label}`; }
+    else if (kind === "outstanding") { rows = rows.filter((c) => Number(c.balance || 0) > 0); title = `Outstanding Due — ${label}`; }
+    setDrill({ title, kind: "collections", rows });
+  };
 
   const netProfit = income ? income.netProfit : null;
   const outstanding = collections.reduce((a, c) => a + Number(c.balance || 0), 0);
@@ -909,12 +988,14 @@ function Dashboard({ settings, collections, referrals, expenses, doctorPays, fy 
         </div>
       </div>
 
+      {drill && <DrillDownPanel drill={drill} onClose={() => setDrill(null)} />}
+
       <div className="period-grid">
-        <PeriodCard title="Today's Collection" summary={todaySummary} />
-        <PeriodCard title="Yesterday's Collection" summary={yestSummary} />
-        <PeriodCard title="Last 7 Days" summary={weekSummary} />
-        <PeriodCard title="This Month" summary={monthSummary} />
-        <PeriodCard title={`This Year (FY ${fy})`} summary={yearSummary} />
+        <PeriodCard title={formatDate(t)} summary={todaySummary} start={t} end={t} onDrill={openDrill} />
+        <PeriodCard title={formatDate(yest)} summary={yestSummary} start={yest} end={yest} onDrill={openDrill} />
+        <PeriodCard title={`${formatDate(weekStart)} – ${formatDate(t)}`} summary={weekSummary} start={weekStart} end={t} onDrill={openDrill} />
+        <PeriodCard title={monthLabel} summary={monthSummary} start={monthStart} end={t} onDrill={openDrill} />
+        <PeriodCard title={`FY ${fy}`} summary={yearSummary} start={range.start} end={range.end} onDrill={openDrill} />
       </div>
 
       <div className="card">
@@ -1130,7 +1211,7 @@ function CaseRecords({ cases, addCase, updateCase, removeCase, doctors, can }) {
           </table>
         )}
         <CustomExport
-          rows={cases} dateField="date" filenameBase="case-records" printTitle="Case Records" canExport={can("cases", "export")}
+          rows={sortedCases} dateField="date" filenameBase="case-records" printTitle="Case Records" canExport={can("cases", "export")}
           buildSheets={(rows) => ({ Cases: rows.map((c) => ({ CaseNo: c.caseNo, Date: c.date, Patient: c.patientName, Phone: c.phone, Doctor: c.doctorName, Shift: c.shift, History: c.briefHistory, ExternalPrescription: c.externalPrescription, MedicinesDispensedValue: medValue(c) })) })}
           printColumns={[
             { label: "Case No.", value: (c) => c.caseNo }, { label: "Date", value: (c) => c.date }, { label: "Patient", value: (c) => c.patientName },
