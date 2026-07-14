@@ -723,6 +723,7 @@ export default function App() {
           .imgcap-controls{display:flex;gap:6px;flex-wrap:wrap;} .imgcap-input{display:none;} .imgcap-label{cursor:pointer;display:inline-block;}
           .note-box{font-size:12px;color:var(--ink-soft);line-height:1.6;background:#F5F8F7;border-left:3px solid var(--accent);padding:10px 12px;border-radius:6px;margin-top:10px;}
           .err-note{font-size:12px;color:var(--expense);background:#f6e4e4;padding:8px 10px;border-radius:6px;margin-top:8px;}
+          .info{font-size:12px;color:var(--income);background:#e3efe6;padding:8px 10px;border-radius:6px;margin-top:8px;}
           @media (max-width:820px){
             .app-root{flex-direction:column;} .sidebar{width:100%;flex-direction:row;flex-wrap:wrap;padding:14px 12px;align-items:center;}
             .sidebar .brand{padding:0 10px 0 0;font-size:17px;} .sidebar .biz{display:none;}
@@ -942,8 +943,101 @@ function CaseRecords({ cases, addCase, updateCase, removeCase, doctors, can }) {
   const remove = async (id) => { try { await removeCase(id); if (editingId === id) cancelEdit(); } catch (e) { setErr(e.message); } };
   const medValue = (c) => (c.medicines || []).reduce((s, m) => s + m.qty * m.price, 0);
 
+  // ---- Bulk upload: download a template, then parse a filled-in copy ----
+  const TEMPLATE_HEADERS = ["Date (YYYY-MM-DD)", "Patient Name", "Phone", "Doctor", "Shift (Morning/Evening)", "Brief Medical History", "Medicine Name", "Quantity", "Indicative Unit Price"];
+  const downloadTemplate = () => {
+    const wb = XLSX.utils.book_new();
+    const example = [
+      ["2026-07-13", "Ramesh Patel", "9825012345", doctors[0]?.name || "Dr. Bhavisha Pratik Ganatra", "Morning", "Fever, body ache — 3 days", "Paracetamol 650", 10, 2],
+      ["2026-07-13", "Ramesh Patel", "9825012345", doctors[0]?.name || "Dr. Bhavisha Pratik Ganatra", "Morning", "Fever, body ache — 3 days", "ORS sachets", 5, 10],
+      ["2026-07-13", "Sunita Mehta", "9825098765", doctors[0]?.name || "Dr. Bhavisha Pratik Ganatra", "Evening", "Routine checkup", "", "", ""],
+    ];
+    const ws = XLSX.utils.aoa_to_sheet([TEMPLATE_HEADERS, ...example]);
+    XLSX.utils.book_append_sheet(wb, ws, "Case Records");
+    XLSX.writeFile(wb, "case-records-upload-template.xlsx");
+  };
+
+  const normalizeDate = (v) => {
+    if (!v) return "";
+    if (v instanceof Date) return v.toISOString().slice(0, 10);
+    const s = String(v).trim();
+    const d = new Date(s);
+    return isNaN(d.getTime()) ? "" : d.toISOString().slice(0, 10);
+  };
+
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkResult, setBulkResult] = useState(null);
+  const bulkInputRef = useRef();
+
+  const handleBulkUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setBulkBusy(true); setBulkResult(null);
+    try {
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: "array" });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+
+      const groups = new Map();
+      let skipped = 0;
+      rows.forEach((row) => {
+        const date = normalizeDate(row["Date (YYYY-MM-DD)"] || row["Date"]);
+        const patientName = String(row["Patient Name"] || "").trim();
+        if (!date || !patientName) { skipped++; return; }
+        const phone = String(row["Phone"] || "").trim();
+        const doctorName = String(row["Doctor"] || "").trim();
+        const shiftRaw = String(row["Shift (Morning/Evening)"] || row["Shift"] || "Morning").trim();
+        const shift = ["Morning", "Evening"].includes(shiftRaw) ? shiftRaw : "Morning";
+        const history = String(row["Brief Medical History"] || "").trim();
+        const key = [date, patientName, phone, doctorName, shift, history].join("||");
+        if (!groups.has(key)) groups.set(key, { date, patientName, phone, doctorName, shift, briefHistory: history, medicines: [] });
+        const medName = String(row["Medicine Name"] || "").trim();
+        if (medName) {
+          groups.get(key).medicines.push({ name: medName, qty: Number(row["Quantity"]) || 0, price: Number(row["Indicative Unit Price"]) || 0 });
+        }
+      });
+
+      let created = 0, failed = 0;
+      for (const g of groups.values()) {
+        const doctor = doctors.find((d) => d.name.toLowerCase() === g.doctorName.toLowerCase());
+        try {
+          await addCase({ date: g.date, patientName: g.patientName, phone: g.phone, briefHistory: g.briefHistory, doctorId: doctor ? doctor.id : null, shift: g.shift, externalPrescription: "", imageUrl: null, medicines: g.medicines });
+          created++;
+        } catch { failed++; }
+      }
+      setBulkResult({ created, failed, skipped, unmatchedDoctors: [...groups.values()].some((g) => g.doctorName && !doctors.find((d) => d.name.toLowerCase() === g.doctorName.toLowerCase())) });
+    } catch (err) {
+      setBulkResult({ error: "Couldn't read that file — make sure it's the .xlsx template, not edited into a different format." });
+    }
+    setBulkBusy(false);
+    e.target.value = "";
+  };
+
   return (
     <div>
+      {can("cases", "write") && (
+        <div className="card">
+          <h2>Bulk upload case records</h2>
+          <p style={{ fontSize: 12.5, color: "var(--ink-soft)", marginTop: -8 }}>Download the template, fill it in offline, then upload it back to create many case records at once.</p>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button className="btn secondary" type="button" onClick={downloadTemplate}>⬇ Download upload template</button>
+            <input ref={bulkInputRef} type="file" accept=".xlsx,.xls,.csv" onChange={handleBulkUpload} style={{ display: "none" }} />
+            <button className="btn" type="button" disabled={bulkBusy} onClick={() => bulkInputRef.current && bulkInputRef.current.click()}>{bulkBusy ? "Uploading…" : "📤 Upload filled template"}</button>
+          </div>
+          {bulkResult && (
+            bulkResult.error ? <ErrorNote msg={bulkResult.error} /> : (
+              <div className="info" style={{ marginTop: 10 }}>
+                Created {bulkResult.created} case record(s).{bulkResult.failed > 0 ? ` ${bulkResult.failed} row(s) failed to save.` : ""}{bulkResult.skipped > 0 ? ` ${bulkResult.skipped} row(s) skipped (missing date or patient name).` : ""}
+                {bulkResult.unmatchedDoctors ? " Some doctor names didn't match anyone on your roster exactly — those cases were created without a doctor assigned; edit them individually to fix." : ""}
+              </div>
+            )
+          )}
+          <div className="note-box">
+            The template has one row per medicine. To give one patient's visit multiple medicines, repeat the same Date, Patient Name, Phone, Doctor, Shift, and Brief Medical History on consecutive rows, changing only the Medicine Name/Quantity/Price columns — matching rows are automatically grouped into a single case. The Doctor column must match a name already on your roster exactly (see "Doctor Shifts & Pay") or it will be left unassigned.
+          </div>
+        </div>
+      )}
       <div className="card">
         <h2>{editingId ? "Edit case paper entry" : "New case paper entry"}</h2>
         <div className="form-grid">
@@ -1227,13 +1321,24 @@ function Collections({ collections, addCollection, updateCollection, removeColle
   }, [call, fy]); // eslint-disable-line
 
   const [editingId, setEditingId] = useState(null);
-  const pickCase = (caseId) => { const c = cases.find((x) => x.id === caseId); setForm({ ...form, caseId, caseNo: c ? c.caseNo : "", patientName: c ? c.patientName : form.patientName, phone: c ? c.phone : form.phone }); };
+  const [caseQuery, setCaseQuery] = useState("");
+  const [caseSuggestOpen, setCaseSuggestOpen] = useState(false);
+  const caseSuggestions = caseQuery.trim()
+    ? cases.filter((c) => c.caseNo.toLowerCase().includes(caseQuery.toLowerCase()) || c.patientName.toLowerCase().includes(caseQuery.toLowerCase())).slice(0, 15)
+    : [];
+  const pickCase = (c) => {
+    setForm({ ...form, caseId: c.id, caseNo: c.caseNo, patientName: c.patientName, phone: c.phone });
+    setCaseQuery(`${c.caseNo} — ${c.patientName}`);
+    setCaseSuggestOpen(false);
+  };
+  const clearCase = () => { setForm({ ...form, caseId: "", caseNo: "" }); setCaseQuery(""); };
   const startEdit = (c) => {
     setEditingId(c.id);
     setForm({ caseId: c.caseId || "", caseNo: c.caseNo || "", patientName: c.patientName, phone: c.phone || "", date: c.date, amountDue: String(c.amountDue), amountCollected: String(c.amountCollected), mode: c.mode || "Cash", image: c.image || null });
+    setCaseQuery(c.caseNo ? `${c.caseNo} — ${c.patientName}` : "");
     setErr("");
   };
-  const cancelEdit = () => { setEditingId(null); setForm(blank); setErr(""); };
+  const cancelEdit = () => { setEditingId(null); setForm(blank); setCaseQuery(""); setErr(""); };
   const save = async () => {
     setErr(""); if (!form.patientName.trim() || form.amountDue === "") { setErr("Enter patient name and amount due."); return; }
     setBusy(true);
@@ -1241,7 +1346,7 @@ function Collections({ collections, addCollection, updateCollection, removeColle
     try {
       if (editingId) { await updateCollection(editingId, payload); setEditingId(null); }
       else { await addCollection(payload); }
-      setForm(blank);
+      setForm(blank); setCaseQuery("");
     } catch (e) { setErr(e.message); }
     setBusy(false);
   };
@@ -1252,7 +1357,21 @@ function Collections({ collections, addCollection, updateCollection, removeColle
       <div className="card">
         <h2>{editingId ? "Edit collection entry" : "New collection entry"}</h2>
         <div className="form-grid">
-          <div><label>Linked case no.</label><select value={form.caseId} onChange={(e) => pickCase(e.target.value)}><option value="">— Not linked —</option>{cases.map((c) => <option key={c.id} value={c.id}>{c.caseNo} — {c.patientName}</option>)}</select></div>
+          <div style={{ position: "relative" }}>
+            <label>Linked case no.</label>
+            <input
+              type="text" value={caseQuery} placeholder="Search by case no. or patient name"
+              onChange={(e) => { setCaseQuery(e.target.value); setCaseSuggestOpen(true); if (!e.target.value.trim()) clearCase(); }}
+              onFocus={() => setCaseSuggestOpen(true)}
+              style={{ width: "100%" }}
+            />
+            {caseSuggestOpen && caseSuggestions.length > 0 && (
+              <div className="suggest-list">
+                {caseSuggestions.map((c) => (<div key={c.id} className="suggest-item" onClick={() => pickCase(c)}>{c.caseNo} — {c.patientName}</div>))}
+              </div>
+            )}
+            {form.caseId && <div style={{ fontSize: 11, color: "var(--income)", marginTop: 4 }}>✓ Linked to {form.caseNo}</div>}
+          </div>
           <div><label>Patient name</label><input type="text" value={form.patientName} onChange={(e) => setForm({ ...form, patientName: e.target.value })} /></div>
           <div><label>Phone</label><input type="tel" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></div>
           <div><label>Date</label><input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /></div>
