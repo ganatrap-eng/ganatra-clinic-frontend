@@ -1727,6 +1727,38 @@ function Collections({ collections, addCollection, updateCollection, removeColle
   };
   const remove = async (id) => { try { await removeCollection(id); if (editingId === id) cancelEdit(); } catch (e) { setErr(e.message); } };
 
+  // ---- Cases with no Collections entry yet — find them and let staff book them, one at a time or all at once ----
+  const linkedCaseIds = useMemo(() => new Set(collections.map((c) => c.caseId).filter(Boolean)), [collections]);
+  const orphanCases = useMemo(() => [...cases].filter((c) => !linkedCaseIds.has(c.id)).sort((a, b) => (a.date < b.date ? 1 : -1)), [cases, linkedCaseIds]);
+  const [orphanRows, setOrphanRows] = useState({}); // caseId -> { amountDue, amountCollected, mode }
+  const [selected, setSelected] = useState(new Set());
+  const [bookBusy, setBookBusy] = useState(false);
+  const [bookErr, setBookErr] = useState("");
+
+  const orphanRow = (c) => orphanRows[c.id] || { amountDue: "", amountCollected: "0", mode: "Cash" };
+  const setOrphanField = (id, field, value) => setOrphanRows((p) => ({ ...p, [id]: { ...(p[id] || { amountDue: "", amountCollected: "0", mode: "Cash" }), [field]: value } }));
+  const toggleSelected = (id) => setSelected((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const toggleSelectAll = () => setSelected((p) => (p.size === orphanCases.length ? new Set() : new Set(orphanCases.map((c) => c.id))));
+
+  const bookOne = async (c) => {
+    const row = orphanRow(c);
+    if (row.amountDue === "" || row.amountDue === undefined) throw new Error(`Enter Amount Due for ${c.caseNo} before booking.`);
+    await addCollection({ caseId: c.id, caseNo: c.caseNo, patientName: c.patientName, phone: c.phone, date: c.date, amountDue: Number(row.amountDue), amountCollected: Number(row.amountCollected) || 0, mode: row.mode || "Cash", imageUrl: null });
+  };
+  const bookSelected = async () => {
+    setBookErr(""); setBookBusy(true);
+    const targets = orphanCases.filter((c) => selected.has(c.id));
+    try {
+      for (const c of targets) await bookOne(c);
+      setSelected(new Set());
+    } catch (e) { setBookErr(e.message); }
+    setBookBusy(false);
+  };
+  const bookSingle = async (c) => {
+    setBookErr("");
+    try { await bookOne(c); } catch (e) { setBookErr(e.message); }
+  };
+
   return (
     <div>
       <div className="card">
@@ -1763,6 +1795,35 @@ function Collections({ collections, addCollection, updateCollection, removeColle
         </div>
         <ErrorNote msg={err} />
       </div>
+
+      {can("collections", "write") && orphanCases.length > 0 && (
+        <div className="card" style={{ borderColor: "var(--accent)" }}>
+          <h2>Cases without a Collection entry ({orphanCases.length})</h2>
+          <p style={{ fontSize: 12.5, color: "var(--ink-soft)", marginTop: -8 }}>Every new case now gets a Collections entry automatically — this list is for older cases from before that, or any case that somehow ended up without one. Amount Due starts blank on purpose; Mode defaults to Cash and Amount Collected to ₹0, both editable before booking.</p>
+          <table>
+            <thead><tr>
+              <th><input type="checkbox" checked={selected.size === orphanCases.length && orphanCases.length > 0} onChange={toggleSelectAll} /> All</th>
+              <th>Date</th><th>Case No.</th><th>Patient</th><th className="num">Amount Due (₹)</th><th className="num">Amount Collected (₹)</th><th>Mode</th><th></th>
+            </tr></thead>
+            <tbody>{orphanCases.map((c) => {
+              const row = orphanRow(c);
+              return (
+                <tr key={c.id}>
+                  <td><input type="checkbox" checked={selected.has(c.id)} onChange={() => toggleSelected(c.id)} /></td>
+                  <td>{c.date}</td><td>{c.caseNo}</td><td>{c.patientName}</td>
+                  <td className="num"><input type="number" style={{ width: 90 }} value={row.amountDue} placeholder="Required" onChange={(e) => setOrphanField(c.id, "amountDue", e.target.value)} /></td>
+                  <td className="num"><input type="number" style={{ width: 90 }} value={row.amountCollected} onChange={(e) => setOrphanField(c.id, "amountCollected", e.target.value)} /></td>
+                  <td><select value={row.mode} onChange={(e) => setOrphanField(c.id, "mode", e.target.value)}>{COLLECTION_MODES.map((m) => <option key={m} value={m}>{m}</option>)}</select></td>
+                  <td><button className="btn small" type="button" onClick={() => bookSingle(c)}>Book</button></td>
+                </tr>
+              );
+            })}</tbody>
+          </table>
+          <button className="btn" style={{ marginTop: 12 }} type="button" disabled={bookBusy || selected.size === 0} onClick={bookSelected}>{bookBusy ? "Booking…" : `Book ${selected.size} selected`}</button>
+          <ErrorNote msg={bookErr} />
+        </div>
+      )}
+
       <div className="card">
         <h2>Collection register</h2>
         {collections.length === 0 ? <div className="empty">No collections recorded yet.</div> : (
