@@ -607,15 +607,15 @@ function AuthScreen({ onLogin, origin, setOrigin }) {
 
 /* ============================== NAV / SHELL ============================== */
 const NAV = [
-  { key: "dashboard", label: "Dashboard", icon: "🏠" }, { key: "cases", label: "Case Records", module: "cases", icon: "📋" },
-  { key: "patientMaster", label: "Patient Master", module: "cases", icon: "🧑‍🤝‍🧑" },
-  { key: "patients", label: "Patient History", module: "cases", icon: "🕒" },
-  { key: "collections", label: "Collections", module: "collections", icon: "💰" }, { key: "doctors", label: "Doctor Shifts & Pay", module: "doctorPay", icon: "🩺" },
-  { key: "referrals", label: "Referral Income", module: "referrals", icon: "🔗" }, { key: "gifts", label: "Gifts Register", module: "gifts", icon: "🎁" },
-  { key: "expenses", label: "Expenses", module: "expenses", icon: "🧾" }, { key: "assets", label: "Fixed Assets", module: "assets", icon: "🏢" },
-  { key: "statements", label: "Financial Statements", module: "statements", icon: "📊" }, { key: "settings", label: "Settings", icon: "⚙️" },
-  { key: "auditLog", label: "User Access Report", module: "auditLog", icon: "🔍" },
-  { key: "admin", label: "User Approvals", adminOnly: true, icon: "✅" },
+  { key: "dashboard", label: "Dashboard", icon: "🏠", grad: ["#F4A340", "#E85D3D"] }, { key: "cases", label: "Case Records", module: "cases", icon: "📋", grad: ["#1F9E8C", "#0B4F4A"] },
+  { key: "patientMaster", label: "Patient Master", module: "cases", icon: "🧑‍🤝‍🧑", grad: ["#B45FC7", "#7C3AA6"] },
+  { key: "patients", label: "Patient History", module: "cases", icon: "🕒", grad: ["#4A90D9", "#1F5FA8"] },
+  { key: "collections", label: "Collections", module: "collections", icon: "💰", grad: ["#3FB86E", "#1F8A5F"] }, { key: "doctors", label: "Doctor Shifts & Pay", module: "doctorPay", icon: "🩺", grad: ["#E8557D", "#B3336B"] },
+  { key: "referrals", label: "Referral Income", module: "referrals", icon: "🔗", grad: ["#5C7FE8", "#3B4FC7"] }, { key: "gifts", label: "Gifts Register", module: "gifts", icon: "🎁", grad: ["#E85D8A", "#C7336B"] },
+  { key: "expenses", label: "Expenses", module: "expenses", icon: "🧾", grad: ["#E8823D", "#B3423A"] }, { key: "assets", label: "Fixed Assets", module: "assets", icon: "🏢", grad: ["#6C7B95", "#3E4A63"] },
+  { key: "statements", label: "Financial Statements", module: "statements", icon: "📊", grad: ["#7C6FD9", "#4F3FA8"] }, { key: "settings", label: "Settings", icon: "⚙️", grad: ["#8A97A8", "#5B6B78"] },
+  { key: "auditLog", label: "User Access Report", module: "auditLog", icon: "🔍", grad: ["#2FADA0", "#1B6E7A"] },
+  { key: "admin", label: "User Approvals", adminOnly: true, icon: "✅", grad: ["#4FB88A", "#1F8A5F"] },
 ];
 
 export default function App() {
@@ -623,7 +623,7 @@ export default function App() {
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState("");
-  const [view, setView] = useState("dashboard");
+  const [view, setView] = useState("launcher");
   const [fy, setFy] = useState(fyOf(todayISO()));
 
   const [settings, setSettings] = useState({ clinicName: "Ganatra Clinic", proprietor: "Dr. Bhavisha Pratik Ganatra", address: "", phone: "" });
@@ -738,6 +738,7 @@ export default function App() {
           .sidebar .biz{padding:0 20px 16px;font-size:11.5px;color:#B9D8D2;border-bottom:1px solid rgba(255,255,255,.15);margin-bottom:8px;line-height:1.5;word-break:break-all;}
           .nav-item{text-align:left;background:none;border:none;color:#EAF3F1;padding:10px 20px;font-size:13.5px;font-weight:500;cursor:pointer;border-left:3px solid transparent;opacity:.82;display:flex;align-items:center;gap:10px;}
           .nav-icon{font-size:15px;line-height:1;width:18px;text-align:center;flex-shrink:0;}
+          .nav-icon-chip{font-size:13px;line-height:1;width:26px;height:26px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 1px 3px rgba(0,0,0,.25);}
           .nav-item.active{background:rgba(0,0,0,.22);border-left-color:var(--accent);opacity:1;font-weight:700;}
           .nav-item:hover{opacity:1;}
           .logout{margin-top:auto;padding:12px 20px;font-size:12px;color:#E9CFCF;background:none;border:none;text-align:left;cursor:pointer;text-decoration:underline;}
@@ -749,6 +750,16 @@ export default function App() {
           .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px 20px;margin-bottom:18px;box-shadow:0 1px 4px rgba(10,40,36,.05);}
           .card h2{font-family:'Plus Jakarta Sans',sans-serif;font-size:16.5px;margin:0 0 12px;color:var(--primary-dark);}
           .grid-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:20px;}
+          .launcher-wrap{background:linear-gradient(160deg,#EFEBFA 0%,#F6F3FC 45%,#FDFBFF 100%);border-radius:16px;padding:36px 28px;min-height:calc(100vh - 100px);}
+          .launcher-header{margin-bottom:28px;}
+          .launcher-header h2{font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;font-size:26px;color:var(--primary-dark);margin:0 0 6px;}
+          .launcher-header p{color:var(--ink-soft);font-size:14px;margin:0;}
+          .launcher-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:18px;}
+          .launcher-tile{display:flex;flex-direction:column;align-items:center;gap:10px;background:#fff;border:1px solid #EAE6F5;border-radius:14px;padding:20px 10px;cursor:pointer;transition:transform .12s ease,box-shadow .12s ease;box-shadow:0 2px 6px rgba(80,60,120,.06);}
+          .launcher-tile:hover{transform:translateY(-3px);box-shadow:0 8px 20px rgba(80,60,120,.14);}
+          .launcher-icon{width:52px;height:52px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:24px;box-shadow:0 3px 8px rgba(0,0,0,.15);}
+          .launcher-label{font-size:12.5px;font-weight:600;color:var(--ink);text-align:center;line-height:1.3;}
+          @media(max-width:640px){ .launcher-grid{grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:12px;} .launcher-wrap{padding:22px 14px;} }
           .period-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-bottom:18px;}
           .kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-bottom:20px;}
           .kpi-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 18px;box-shadow:0 1px 4px rgba(10,40,36,.05);}
@@ -817,15 +828,16 @@ export default function App() {
         `}</style>
 
         <nav className="sidebar">
-          <div className="brand">GANATRA CLINIC</div>
+          <div className="brand" style={{ cursor: "pointer" }} onClick={() => setView("launcher")} title="Back to app launcher">GANATRA CLINIC</div>
           <div className="biz">{settings.proprietor}<br />{session.name} ({session.userId}) · {session.role}<br /><span style={{ opacity: .7 }}>{origin}</span></div>
-          {NAV.filter((n) => !n.adminOnly || session.role === "Admin").filter((n) => !n.module || can(n.module, "view")).map((n) => (<button key={n.key} className={"nav-item" + (view === n.key ? " active" : "")} onClick={() => setView(n.key)}><span className="nav-icon">{n.icon}</span>{n.label}</button>))}
+          <button className={"nav-item" + (view === "launcher" ? " active" : "")} onClick={() => setView("launcher")}><span className="nav-icon-chip" style={{ background: `linear-gradient(135deg, #F4A340, #E85D3D)` }}>🔷</span>Home</button>
+          {NAV.filter((n) => !n.adminOnly || session.role === "Admin").filter((n) => !n.module || can(n.module, "view")).map((n) => (<button key={n.key} className={"nav-item" + (view === n.key ? " active" : "")} onClick={() => setView(n.key)}><span className="nav-icon-chip" style={{ background: `linear-gradient(135deg, ${n.grad[0]}, ${n.grad[1]})` }}>{n.icon}</span>{n.label}</button>))}
           <button className="logout" onClick={() => setSession(null)}>Log out</button>
         </nav>
 
         <div className="main">
-          <div className="topbar">
-            <h1>{NAV.find((n) => n.key === view)?.label}</h1>
+          <div className="topbar" style={view === "launcher" ? { visibility: "hidden", height: 0, overflow: "hidden", padding: 0, margin: 0, border: "none" } : undefined}>
+            <h1>{NAV.find((n) => n.key === view)?.label || "Home"}</h1>
             <select className="fy-select no-print" value={fy} onChange={(e) => setFy(e.target.value)}>{last4FYs().map((f) => <option key={f} value={f}>FY {f}</option>)}</select>
           </div>
           <div className="content">
@@ -833,6 +845,7 @@ export default function App() {
               <div className="card"><h2>Couldn't load your data</h2><ErrorNote msg={loadError} /><button className="btn" style={{ marginTop: 10 }} onClick={reloadAll} type="button">Retry</button></div>
             ) : (
               <>
+                {view === "launcher" && <LauncherGrid settings={settings} session={session} can={can} setView={setView} />}
                 {view === "dashboard" && <Dashboard settings={settings} collections={collections} referrals={referrals} expenses={expenses} doctorPays={doctorPays} cases={cases} fy={fy} />}
                 {view === "cases" && can("cases", "view") && <CaseRecords cases={cases} addCase={addCase} updateCase={updateCase} removeCase={removeCase} doctors={doctors} patientsMaster={patientsMaster} can={can} />}
                 {view === "patientMaster" && can("cases", "view") && <PatientMaster can={can} patients={patientsMaster} addPatient={addPatientMaster} updatePatient={updatePatientMaster} removePatient={removePatientMaster} />}
@@ -1084,6 +1097,30 @@ function ShiftCollectionChart({ collections, cases, fy }) {
       <div className="export-row no-print">
         <button className="btn secondary small" type="button" onClick={doExcel}>⬇ Export Excel</button>
         <button className="btn secondary small" type="button" onClick={doPrint}>⎙ Export PDF</button>
+      </div>
+    </div>
+  );
+}
+
+/** A colorful grid-tile home screen (Odoo-style app launcher) — each module
+ *  gets its own gradient-colored icon tile. Purely a navigation surface; it
+ *  doesn't fetch or show any data itself, so it carries no security surface
+ *  beyond the same view-permission filtering already applied everywhere else. */
+function LauncherGrid({ settings, session, can, setView }) {
+  const tiles = NAV.filter((n) => !n.adminOnly || session.role === "Admin").filter((n) => !n.module || can(n.module, "view"));
+  return (
+    <div className="launcher-wrap">
+      <div className="launcher-header">
+        <h2>{settings.clinicName || "Ganatra Clinic"}</h2>
+        <p>Welcome back, {session.name.split(" ")[0]} — pick where you want to go.</p>
+      </div>
+      <div className="launcher-grid">
+        {tiles.map((n) => (
+          <button key={n.key} className="launcher-tile" onClick={() => setView(n.key)}>
+            <span className="launcher-icon" style={{ background: `linear-gradient(135deg, ${n.grad[0]}, ${n.grad[1]})` }}>{n.icon}</span>
+            <span className="launcher-label">{n.label}</span>
+          </button>
+        ))}
       </div>
     </div>
   );
