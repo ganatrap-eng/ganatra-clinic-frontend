@@ -607,15 +607,15 @@ function AuthScreen({ onLogin, origin, setOrigin }) {
 
 /* ============================== NAV / SHELL ============================== */
 const NAV = [
-  { key: "dashboard", label: "Dashboard" }, { key: "cases", label: "Case Records", module: "cases" },
-  { key: "patientMaster", label: "Patient Master", module: "cases" },
-  { key: "patients", label: "Patient History", module: "cases" },
-  { key: "collections", label: "Collections", module: "collections" }, { key: "doctors", label: "Doctor Shifts & Pay", module: "doctorPay" },
-  { key: "referrals", label: "Referral Income", module: "referrals" }, { key: "gifts", label: "Gifts Register", module: "gifts" },
-  { key: "expenses", label: "Expenses", module: "expenses" }, { key: "assets", label: "Fixed Assets", module: "assets" },
-  { key: "statements", label: "Financial Statements", module: "statements" }, { key: "settings", label: "Settings" },
-  { key: "auditLog", label: "User Access Report", module: "auditLog" },
-  { key: "admin", label: "User Approvals", adminOnly: true },
+  { key: "dashboard", label: "Dashboard", icon: "🏠" }, { key: "cases", label: "Case Records", module: "cases", icon: "📋" },
+  { key: "patientMaster", label: "Patient Master", module: "cases", icon: "🧑‍🤝‍🧑" },
+  { key: "patients", label: "Patient History", module: "cases", icon: "🕒" },
+  { key: "collections", label: "Collections", module: "collections", icon: "💰" }, { key: "doctors", label: "Doctor Shifts & Pay", module: "doctorPay", icon: "🩺" },
+  { key: "referrals", label: "Referral Income", module: "referrals", icon: "🔗" }, { key: "gifts", label: "Gifts Register", module: "gifts", icon: "🎁" },
+  { key: "expenses", label: "Expenses", module: "expenses", icon: "🧾" }, { key: "assets", label: "Fixed Assets", module: "assets", icon: "🏢" },
+  { key: "statements", label: "Financial Statements", module: "statements", icon: "📊" }, { key: "settings", label: "Settings", icon: "⚙️" },
+  { key: "auditLog", label: "User Access Report", module: "auditLog", icon: "🔍" },
+  { key: "admin", label: "User Approvals", adminOnly: true, icon: "✅" },
 ];
 
 export default function App() {
@@ -736,7 +736,8 @@ export default function App() {
           .sidebar{width:230px;background:linear-gradient(180deg,var(--primary),var(--primary-dark));color:#EAF3F1;flex-shrink:0;padding:22px 0;display:flex;flex-direction:column;}
           .sidebar .brand{font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;font-size:20px;padding:0 20px 2px;}
           .sidebar .biz{padding:0 20px 16px;font-size:11.5px;color:#B9D8D2;border-bottom:1px solid rgba(255,255,255,.15);margin-bottom:8px;line-height:1.5;word-break:break-all;}
-          .nav-item{text-align:left;background:none;border:none;color:#EAF3F1;padding:10px 20px;font-size:13.5px;font-weight:500;cursor:pointer;border-left:3px solid transparent;opacity:.82;}
+          .nav-item{text-align:left;background:none;border:none;color:#EAF3F1;padding:10px 20px;font-size:13.5px;font-weight:500;cursor:pointer;border-left:3px solid transparent;opacity:.82;display:flex;align-items:center;gap:10px;}
+          .nav-icon{font-size:15px;line-height:1;width:18px;text-align:center;flex-shrink:0;}
           .nav-item.active{background:rgba(0,0,0,.22);border-left-color:var(--accent);opacity:1;font-weight:700;}
           .nav-item:hover{opacity:1;}
           .logout{margin-top:auto;padding:12px 20px;font-size:12px;color:#E9CFCF;background:none;border:none;text-align:left;cursor:pointer;text-decoration:underline;}
@@ -749,6 +750,18 @@ export default function App() {
           .card h2{font-family:'Plus Jakarta Sans',sans-serif;font-size:16.5px;margin:0 0 12px;color:var(--primary-dark);}
           .grid-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:20px;}
           .period-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-bottom:18px;}
+          .kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-bottom:20px;}
+          .kpi-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 18px;box-shadow:0 1px 4px rgba(10,40,36,.05);}
+          .kpi-top{display:flex;align-items:center;gap:8px;margin-bottom:10px;}
+          .kpi-icon{font-size:20px;line-height:1;}
+          .kpi-label{font-size:10.5px;text-transform:uppercase;letter-spacing:.8px;color:var(--ink-soft);font-weight:700;}
+          .kpi-bottom{display:flex;align-items:center;justify-content:space-between;gap:10px;}
+          .kpi-value{font-family:'IBM Plex Mono',monospace;font-size:22px;font-weight:700;white-space:nowrap;}
+          .section-header{font-family:'Plus Jakarta Sans',sans-serif;font-size:13px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:var(--primary-dark);margin:26px 0 12px;padding-bottom:6px;border-bottom:2px solid var(--accent-soft);}
+          .section-header:first-child{margin-top:0;}
+          .insight-banner{background:linear-gradient(135deg,var(--primary),var(--primary-dark));color:#EAF3F1;border-radius:12px;padding:16px 20px;margin-bottom:20px;font-size:14px;line-height:1.6;display:flex;align-items:center;gap:12px;}
+          .insight-banner .insight-icon{font-size:22px;}
+          .mode-pill{display:inline-flex;align-items:center;gap:5px;}
           .period-card{margin-bottom:0;}
           .period-card table{font-size:12.5px;}
           .period-card td{padding:5px 4px;}
@@ -806,7 +819,7 @@ export default function App() {
         <nav className="sidebar">
           <div className="brand">GANATRA CLINIC</div>
           <div className="biz">{settings.proprietor}<br />{session.name} ({session.userId}) · {session.role}<br /><span style={{ opacity: .7 }}>{origin}</span></div>
-          {NAV.filter((n) => !n.adminOnly || session.role === "Admin").filter((n) => !n.module || can(n.module, "view")).map((n) => (<button key={n.key} className={"nav-item" + (view === n.key ? " active" : "")} onClick={() => setView(n.key)}>{n.label}</button>))}
+          {NAV.filter((n) => !n.adminOnly || session.role === "Admin").filter((n) => !n.module || can(n.module, "view")).map((n) => (<button key={n.key} className={"nav-item" + (view === n.key ? " active" : "")} onClick={() => setView(n.key)}><span className="nav-icon">{n.icon}</span>{n.label}</button>))}
           <button className="logout" onClick={() => setSession(null)}>Log out</button>
         </nav>
 
@@ -865,6 +878,37 @@ function periodSummary(collections, expenses, start, end) {
   return { modeTotals, outstanding, expenseTotal, netProfit, collectedTotal };
 }
 
+const MODE_ICONS = { Cash: "💵", UPI: "📱", Card: "💳", Other: "🧾" };
+
+/** A tiny inline trend line — no axes, no grid, just the shape of the last
+ *  N values. Uses Recharts (already a dependency) so this adds no new
+ *  packages and no new build risk. */
+function Sparkline({ data, color = "#0B4F4A", height = 34, width = 90 }) {
+  if (!data || data.length < 2) return <div style={{ width, height }} />;
+  return (
+    <ResponsiveContainer width={width} height={height}>
+      <LineChart data={data}>
+        <Line type="monotone" dataKey="v" stroke={color} strokeWidth={2} dot={false} isAnimationActive={false} />
+      </LineChart>
+    </ResponsiveContainer>
+  );
+}
+
+function KpiCard({ icon, label, value, color, sparkline, sparklineColor, hint }) {
+  return (
+    <div className="kpi-card" title={hint}>
+      <div className="kpi-top">
+        <span className="kpi-icon">{icon}</span>
+        <span className="kpi-label">{label}</span>
+      </div>
+      <div className="kpi-bottom">
+        <span className="kpi-value" style={{ color }}>{value}</span>
+        {sparkline && <Sparkline data={sparkline} color={sparklineColor || color} />}
+      </div>
+    </div>
+  );
+}
+
 function formatDate(iso) {
   if (!iso) return "";
   const d = new Date(iso + "T00:00:00");
@@ -877,7 +921,7 @@ function PeriodCard({ title, summary, start, end, onDrill }) {
       style={{ fontWeight: bold ? 700 : 400, borderTop: borderTop ? `${borderTop} solid var(--border)` : undefined, cursor: "pointer" }}
       onClick={() => onDrill({ kind, mode, start, end, label: title })}
     >
-      <td style={{ textDecoration: "underline", textDecorationStyle: "dotted", textDecorationColor: "var(--ink-soft)" }}>{label}</td>
+      <td style={{ textDecoration: "underline", textDecorationStyle: "dotted", textDecorationColor: "var(--ink-soft)" }}>{mode ? <span className="mode-pill">{MODE_ICONS[mode]} {label}</span> : label}</td>
       <td className="num" style={{ color }}>{inr(value)}</td>
     </tr>
   );
@@ -893,7 +937,7 @@ function PeriodCard({ title, summary, start, end, onDrill }) {
           <Row label="+ Outstanding due" value={summary.outstanding} kind="outstanding" />
           <Row label="− Expenses" value={summary.expenseTotal} kind="expenses" color="var(--expense)" />
           <tr style={{ fontWeight: 700, borderTop: "2px solid var(--accent)" }}>
-            <td>Net Profit</td>
+            <td>{summary.netProfit >= 0 ? "📈" : "📉"} Net Profit</td>
             <td className="num" style={{ color: summary.netProfit >= 0 ? "var(--income)" : "var(--expense)" }}>{inr(summary.netProfit)}</td>
           </tr>
         </tbody>
@@ -1093,18 +1137,56 @@ function Dashboard({ settings, collections, referrals, expenses, doctorPays, cas
     { name: "Outstanding Due", value: yearSummary.outstanding },
   ].filter((x) => x.value > 0);
 
+  // Previous 7 days (before this week), for the "up/down vs last week" insight
+  const prevWeekEnd = (() => { const d = new Date(); d.setDate(d.getDate() - 7); return d.toISOString().slice(0, 10); })();
+  const prevWeekStart = (() => { const d = new Date(); d.setDate(d.getDate() - 13); return d.toISOString().slice(0, 10); })();
+  const prevWeekSummary = periodSummary(collections, expenses, prevWeekStart, prevWeekEnd);
+  const weekChangePct = prevWeekSummary.collectedTotal > 0
+    ? Math.round(((weekSummary.collectedTotal - prevWeekSummary.collectedTotal) / prevWeekSummary.collectedTotal) * 100)
+    : null;
+
+  // Sparkline series: last 14 days of collected+expense, for the KPI cards
+  const last14Spark = [];
+  for (let i = 13; i >= 0; i--) { const dt = new Date(); dt.setDate(dt.getDate() - i); const iso = dt.toISOString().slice(0, 10); const s = periodSummary(collections, expenses, iso, iso); last14Spark.push({ collected: s.collectedTotal, expense: s.expenseTotal, net: s.netProfit }); }
+  const sparkCollected = last14Spark.map((s) => ({ v: s.collected }));
+  const sparkExpense = last14Spark.map((s) => ({ v: s.expense }));
+  const sparkOutstanding = last14Spark.map(() => ({ v: outstanding })); // flat — overall figure, shown for shape consistency
+
+  // Doctor-wise revenue for the FY, via each collection's linked case
+  const doctorRevenue = useMemo(() => {
+    const totals = {};
+    collections.filter((c) => c.date >= range.start && c.date <= range.end).forEach((c) => {
+      const linked = c.caseId ? caseById[c.caseId] : null;
+      const name = linked?.doctorName || "Unassigned";
+      totals[name] = (totals[name] || 0) + Number(c.amountDue || 0);
+    });
+    return Object.entries(totals).sort((a, b) => b[1] - a[1]);
+  }, [collections, caseById, range.start, range.end]);
+
   return (
     <div>
-      <div className="grid-cards">
-        <div className="stat"><div className="label">Outstanding Dues (overall)</div><div className="value">{inr(outstanding)}</div></div>
-        <div className="stat" style={{ borderLeftColor: (netProfit ?? 0) >= 0 ? "#1F8A5F" : "#B3423A" }}>
-          <div className="label">Net Profit (FY {fy}, full P&amp;L)</div>
-          <div className="value" style={{ color: (netProfit ?? 0) >= 0 ? "#1F8A5F" : "#B3423A" }}>{netProfit === null ? "…" : inr(netProfit)}</div>
-        </div>
+      <div className="insight-banner">
+        <span className="insight-icon">{weekChangePct === null ? "👋" : weekChangePct >= 0 ? "📈" : "📉"}</span>
+        <span>
+          {weekChangePct === null
+            ? <>Welcome back — here's how {settings.clinicName || "the clinic"} is doing right now.</>
+            : <>Collections are <b>{weekChangePct >= 0 ? "up" : "down"} {Math.abs(weekChangePct)}%</b> this week vs last week.</>}
+          {" "}Outstanding dues stand at <b>{inr(outstanding)}</b>.
+          {expenseByCat && Object.keys(expenseByCat).length > 0 && <> Expenses this FY: <b>{inr(Object.values(expenseByCat).reduce((s, v) => s + v, 0))}</b>.</>}
+        </span>
+      </div>
+
+      <div className="section-header">Key Numbers</div>
+      <div className="kpi-grid">
+        <KpiCard icon="⚠️" label="Outstanding Dues" value={inr(outstanding)} color="var(--accent)" hint="Total unpaid balance across every collection entry, all time" />
+        <KpiCard icon={(netProfit ?? 0) >= 0 ? "📈" : "📉"} label={`Net Profit (FY ${fy})`} value={netProfit === null ? "…" : inr(netProfit)} color={(netProfit ?? 0) >= 0 ? "#1F8A5F" : "#B3423A"} sparkline={last14Spark.map((s) => ({ v: s.net }))} sparklineColor={(netProfit ?? 0) >= 0 ? "#1F8A5F" : "#B3423A"} hint="Full P&L net profit for the financial year, last 14 days trend shown" />
+        <KpiCard icon="💰" label="This Week's Collection" value={inr(weekSummary.collectedTotal)} color="var(--primary-dark)" sparkline={sparkCollected} hint="Cash actually collected in the last 7 days" />
+        <KpiCard icon="🧾" label="This Week's Expenses" value={inr(weekSummary.expenseTotal)} color="var(--expense)" sparkline={sparkExpense} sparklineColor="var(--expense)" hint="Expenses logged in the last 7 days" />
       </div>
 
       {drill && <DrillDownPanel drill={drill} onClose={() => setDrill(null)} />}
 
+      <div className="section-header">Daily &amp; Periodic Snapshot</div>
       <div className="period-grid">
         <PeriodCard title={formatDate(t)} summary={todaySummary} start={t} end={t} onDrill={openDrill} />
         <PeriodCard title={formatDate(yest)} summary={yestSummary} start={yest} end={yest} onDrill={openDrill} />
@@ -1113,8 +1195,9 @@ function Dashboard({ settings, collections, referrals, expenses, doctorPays, cas
         <PeriodCard title={`FY ${fy}`} summary={yearSummary} start={range.start} end={range.end} onDrill={openDrill} />
       </div>
 
+      <div className="section-header">Trends</div>
       <div className="card">
-        <h2>Collection trend — last 30 days</h2>
+        <h2>📈 Collection trend — last 30 days</h2>
         <ResponsiveContainer width="100%" height={220}>
           <AreaChart data={last30}>
             <defs><linearGradient id="cg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#0B4F4A" stopOpacity={0.35} /><stop offset="100%" stopColor="#0B4F4A" stopOpacity={0.02} /></linearGradient></defs>
@@ -1124,8 +1207,10 @@ function Dashboard({ settings, collections, referrals, expenses, doctorPays, cas
         </ResponsiveContainer>
       </div>
       <ShiftCollectionChart collections={collections} cases={cases} fy={fy} />
+
+      <div className="section-header">Breakdowns</div>
       <div className="card">
-        <h2>Collection breakdown — FY {fy} (mode &amp; outstanding dues)</h2>
+        <h2>🥧 Collection breakdown — FY {fy} (mode &amp; outstanding dues)</h2>
         {collectionPieData.length === 0 ? <div className="empty">No collections logged yet for this financial year.</div> : (
           <ResponsiveContainer width="100%" height={240}>
             <PieChart><Pie data={collectionPieData} dataKey="value" nameKey="name" innerRadius={55} outerRadius={90} paddingAngle={2}>{collectionPieData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}</Pie><Legend /><Tooltip formatter={(v) => inr(v)} /></PieChart>
@@ -1133,12 +1218,24 @@ function Dashboard({ settings, collections, referrals, expenses, doctorPays, cas
         )}
       </div>
       <div className="card">
-        <h2>Expense breakdown — FY {fy}</h2>
+        <h2>🧾 Expense breakdown — FY {fy}</h2>
         {pieData.length === 0 ? <div className="empty">No expenses logged yet for this financial year.</div> : (
           <ResponsiveContainer width="100%" height={240}>
             <PieChart><Pie data={pieData} dataKey="value" nameKey="name" innerRadius={55} outerRadius={90} paddingAngle={2}>{pieData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}</Pie><Legend /><Tooltip formatter={(v) => inr(v)} /></PieChart>
           </ResponsiveContainer>
         )}
+      </div>
+
+      <div className="section-header">Doctor Performance</div>
+      <div className="card">
+        <h2>👩‍⚕️ Revenue by doctor — FY {fy}</h2>
+        {doctorRevenue.length === 0 ? <div className="empty">No collections linked to a doctor yet this financial year.</div> : (
+          <table>
+            <thead><tr><th>Doctor</th><th className="num">Billed revenue</th></tr></thead>
+            <tbody>{doctorRevenue.map(([name, amt]) => (<tr key={name}><td>{name}</td><td className="num">{inr(amt)}</td></tr>))}</tbody>
+          </table>
+        )}
+        <div className="note-box">Based on Amount Due for collections linked to a case (shift/doctor comes from the linked case record) — "Unassigned" means the collection isn't linked to a case, or the case has no doctor selected.</div>
       </div>
     </div>
   );
