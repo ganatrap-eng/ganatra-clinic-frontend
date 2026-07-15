@@ -677,8 +677,19 @@ export default function App() {
   const addDoctor = useCallback(async (body) => { const r = await call("/doctors", { method: "POST", body }); setDoctors((p) => [...p, mapDoctor(r)]); }, [call]);
   const updateDoctor = useCallback(async (id, body) => { const r = await call(`/doctors/${id}`, { method: "PUT", body }); setDoctors((p) => p.map((x) => (x.id === id ? mapDoctor(r) : x))); }, [call]);
   const removeDoctor = useCallback(async (id) => { await call(`/doctors/${id}`, { method: "DELETE" }); setDoctors((p) => p.filter((x) => x.id !== id)); }, [call]);
-  const addCase = useCallback(async (body) => { const r = await call("/cases", { method: "POST", body }); const doc = doctors.find((d) => d.id === body.doctorId); setCases((p) => [{ ...mapCase(r), doctorName: doc?.name }, ...p]); return r; }, [call, doctors]);
-  const updateCase = useCallback(async (id, body) => { const r = await call(`/cases/${id}`, { method: "PUT", body }); const doc = doctors.find((d) => d.id === body.doctorId); setCases((p) => p.map((x) => (x.id === id ? { ...mapCase(r), doctorName: doc?.name } : x))); }, [call, doctors]);
+  const addCase = useCallback(async (body) => {
+    const r = await call("/cases", { method: "POST", body });
+    const doc = doctors.find((d) => d.id === body.doctorId);
+    setCases((p) => [{ ...mapCase(r), doctorName: doc?.name }, ...p]);
+    if (r.collection) setCollections((p) => [mapCollection(r.collection), ...p]);
+    return r;
+  }, [call, doctors]);
+  const updateCase = useCallback(async (id, body) => {
+    const r = await call(`/cases/${id}`, { method: "PUT", body });
+    const doc = doctors.find((d) => d.id === body.doctorId);
+    setCases((p) => p.map((x) => (x.id === id ? { ...mapCase(r), doctorName: doc?.name } : x)));
+    setCollections((p) => p.map((c) => (c.caseId === id ? { ...c, patientName: body.patientName, phone: body.phone, caseNo: r.case_no } : c)));
+  }, [call, doctors]);
   const removeCase = useCallback(async (id) => { await call(`/cases/${id}`, { method: "DELETE" }); setCases((p) => p.filter((x) => x.id !== id)); }, [call]);
   const addCollection = useCallback(async (body) => { const r = await call("/collections", { method: "POST", body }); setCollections((p) => [mapCollection(r), ...p]); }, [call]);
   const updateCollection = useCallback(async (id, body) => { const r = await call(`/collections/${id}`, { method: "PUT", body }); setCollections((p) => p.map((x) => (x.id === id ? mapCollection(r) : x))); }, [call]);
@@ -1178,13 +1189,13 @@ function CaseRecords({ cases, addCase, updateCase, removeCase, doctors, patients
   const { sorted: sortedCases, Th: CaseTh } = useSortableRows(cases, caseColumns, "date", "desc");
 
   // ---- Bulk upload: download a template, then parse a filled-in copy ----
-  const TEMPLATE_HEADERS = ["Date (YYYY-MM-DD)", "Patient Name", "Phone", "Doctor", "Shift (Morning/Evening)", "Brief Medical History", "Medicine Name", "Quantity", "Indicative Unit Price"];
+  const TEMPLATE_HEADERS = ["Date (YYYY-MM-DD)", "Patient Name", "Phone", "Doctor", "Shift (Morning/Evening)", "Brief Medical History", "Medicine Name", "Quantity", "Indicative Unit Price", "Amount Due (₹, optional)", "Mode of Payment (Cash/UPI/Card/Other, optional)"];
   const downloadTemplate = () => {
     const wb = XLSX.utils.book_new();
     const example = [
-      ["2026-07-13", "Ramesh Patel", "9825012345", doctors[0]?.name || "Dr. Bhavisha Pratik Ganatra", "Morning", "Fever, body ache — 3 days", "Paracetamol 650", 10, 2],
-      ["2026-07-13", "Ramesh Patel", "9825012345", doctors[0]?.name || "Dr. Bhavisha Pratik Ganatra", "Morning", "Fever, body ache — 3 days", "ORS sachets", 5, 10],
-      ["2026-07-13", "Sunita Mehta", "9825098765", doctors[0]?.name || "Dr. Bhavisha Pratik Ganatra", "Evening", "Routine checkup", "", "", ""],
+      ["2026-07-13", "Ramesh Patel", "9825012345", doctors[0]?.name || "Dr. Bhavisha Pratik Ganatra", "Morning", "Fever, body ache — 3 days", "Paracetamol 650", 10, 2, 500, "Cash"],
+      ["2026-07-13", "Ramesh Patel", "9825012345", doctors[0]?.name || "Dr. Bhavisha Pratik Ganatra", "Morning", "Fever, body ache — 3 days", "ORS sachets", 5, 10, "", ""],
+      ["2026-07-13", "Sunita Mehta", "9825098765", doctors[0]?.name || "Dr. Bhavisha Pratik Ganatra", "Evening", "Routine checkup", "", "", "", "", ""],
     ];
     const ws = XLSX.utils.aoa_to_sheet([TEMPLATE_HEADERS, ...example]);
     XLSX.utils.book_append_sheet(wb, ws, "Case Records");
@@ -1225,7 +1236,15 @@ function CaseRecords({ cases, addCase, updateCase, removeCase, doctors, patients
         const shift = ["Morning", "Evening"].includes(shiftRaw) ? shiftRaw : "Morning";
         const history = String(row["Brief Medical History"] || "").trim();
         const key = [date, patientName, phone, doctorName, shift, history].join("||");
-        if (!groups.has(key)) groups.set(key, { date, patientName, phone, doctorName, shift, briefHistory: history, medicines: [] });
+        if (!groups.has(key)) {
+          const amountDueRaw = row["Amount Due (₹, optional)"] ?? row["Amount Due"];
+          const modeRaw = String(row["Mode of Payment (Cash/UPI/Card/Other, optional)"] || row["Mode of Payment"] || row["Mode"] || "").trim();
+          groups.set(key, {
+            date, patientName, phone, doctorName, shift, briefHistory: history, medicines: [],
+            amountDue: amountDueRaw !== undefined && amountDueRaw !== "" ? Number(amountDueRaw) || 0 : undefined,
+            mode: COLLECTION_MODES.includes(modeRaw) ? modeRaw : undefined,
+          });
+        }
         const medName = String(row["Medicine Name"] || "").trim();
         if (medName) {
           groups.get(key).medicines.push({ name: medName, qty: Number(row["Quantity"]) || 0, price: Number(row["Indicative Unit Price"]) || 0 });
@@ -1236,7 +1255,7 @@ function CaseRecords({ cases, addCase, updateCase, removeCase, doctors, patients
       for (const g of groups.values()) {
         const doctor = doctors.find((d) => d.name.toLowerCase() === g.doctorName.toLowerCase());
         try {
-          await addCase({ date: g.date, patientName: g.patientName, phone: g.phone, briefHistory: g.briefHistory, doctorId: doctor ? doctor.id : null, shift: g.shift, externalPrescription: "", imageUrl: null, medicines: g.medicines });
+          await addCase({ date: g.date, patientName: g.patientName, phone: g.phone, briefHistory: g.briefHistory, doctorId: doctor ? doctor.id : null, shift: g.shift, externalPrescription: "", imageUrl: null, medicines: g.medicines, amountDue: g.amountDue, mode: g.mode });
           created++;
         } catch { failed++; }
       }
@@ -1268,7 +1287,7 @@ function CaseRecords({ cases, addCase, updateCase, removeCase, doctors, patients
             )
           )}
           <div className="note-box">
-            The template has one row per medicine. To give one patient's visit multiple medicines, repeat the same Date, Patient Name, Phone, Doctor, Shift, and Brief Medical History on consecutive rows, changing only the Medicine Name/Quantity/Price columns — matching rows are automatically grouped into a single case. The Doctor column must match a name already on your roster exactly (see "Doctor Shifts & Pay") or it will be left unassigned.
+            The template has one row per medicine. To give one patient's visit multiple medicines, repeat the same Date, Patient Name, Phone, Doctor, Shift, and Brief Medical History on consecutive rows, changing only the Medicine Name/Quantity/Price columns — matching rows are automatically grouped into a single case. The Doctor column must match a name already on your roster exactly (see "Doctor Shifts & Pay") or it will be left unassigned. Every case — from this upload or the form above — automatically gets a matching Collections entry: fill in Amount Due and Mode of Payment on this sheet to pre-fill it, or leave them blank and it's created as "Pending," ready to complete later on the Collections page.
           </div>
         </div>
       )}
@@ -1749,12 +1768,14 @@ function Collections({ collections, addCollection, updateCollection, removeColle
         {collections.length === 0 ? <div className="empty">No collections recorded yet.</div> : (
           <table>
             <thead><tr><th>Date</th><th>Case No.</th><th>Patient</th><th>Phone</th><th className="num">Due</th><th className="num">Collected</th><th className="num">Balance</th><th>Mode</th><th></th></tr></thead>
-            <tbody>{[...collections].sort((a, b) => (a.date < b.date ? 1 : -1)).map((c) => (
-              <tr key={c.id}><td>{c.date}</td><td>{c.caseNo || "—"}</td><td>{c.patientName}</td><td>{c.phone}</td>
+            <tbody>{[...collections].sort((a, b) => (a.date < b.date ? 1 : -1)).map((c) => {
+              const pending = !c.mode && Number(c.amountDue || 0) === 0 && Number(c.amountCollected || 0) === 0;
+              return (
+              <tr key={c.id} style={pending ? { background: "#FFF8E8" } : undefined}><td>{c.date}</td><td>{c.caseNo || "—"}</td><td>{c.patientName}</td><td>{c.phone}</td>
                 <td className="num">{inr(c.amountDue)}</td><td className="num">{inr(c.amountCollected)}</td>
                 <td className="num" style={{ color: c.balance > 0 ? "var(--expense)" : "var(--income)" }}>{inr(c.balance)}</td>
-                <td>{c.mode}</td><td style={{ display: "flex", gap: 6 }}>{can("collections", "edit") && <button className="btn secondary small" type="button" onClick={() => startEdit(c)}>Edit</button>}{can("collections", "delete") && <button className="btn danger small" type="button" onClick={() => remove(c.id)}>Delete</button>}</td></tr>
-            ))}</tbody>
+                <td>{c.mode || <span style={{ color: "var(--accent)", fontWeight: 700 }}>Pending</span>}</td><td style={{ display: "flex", gap: 6 }}>{can("collections", "edit") && <button className="btn secondary small" type="button" onClick={() => startEdit(c)}>Edit</button>}{can("collections", "delete") && <button className="btn danger small" type="button" onClick={() => remove(c.id)}>Delete</button>}</td></tr>
+            );})}</tbody>
           </table>
         )}
         <CustomExport
@@ -1765,6 +1786,7 @@ function Collections({ collections, addCollection, updateCollection, removeColle
             { label: "Due", value: (r) => inr(r.amountDue) }, { label: "Collected", value: (r) => inr(r.amountCollected) }, { label: "Balance", value: (r) => inr(r.balance) },
           ]}
         />
+        {can("collections", "export") && <div className="note-box">Leave both dates blank in "Custom range export" and it exports every collection on record — a full downloadable database, not just a date range.</div>}
       </div>
       <div className="card">
         <h2>Daily / weekly / monthly collection — FY {fy}</h2>
