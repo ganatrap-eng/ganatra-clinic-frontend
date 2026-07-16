@@ -761,6 +761,9 @@ export default function App() {
           .launcher-label{font-size:12.5px;font-weight:600;color:var(--ink);text-align:center;line-height:1.3;}
           @media(max-width:640px){ .launcher-grid{grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:12px;} .launcher-wrap{padding:22px 14px;} }
           .period-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-bottom:18px;}
+          .week-picker{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:-4px 0 10px;}
+          .week-picker input[type="month"],.week-picker select{font-size:11.5px;padding:4px 6px;border-radius:6px;border:1px solid var(--border);background:#fff;color:var(--ink);}
+          .week-range-label{font-size:11px;color:var(--ink-soft);width:100%;}
           .kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-bottom:20px;}
           .kpi-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 18px;box-shadow:0 1px 4px rgba(10,40,36,.05);}
           .kpi-top{display:flex;align-items:center;gap:8px;margin-bottom:10px;}
@@ -928,7 +931,7 @@ function formatDate(iso) {
   return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 }
 
-function PeriodCard({ title, summary, start, end, onDrill }) {
+function PeriodCard({ title, summary, start, end, onDrill, headerExtra }) {
   const Row = ({ label, value, kind, mode, bold, borderTop, color }) => (
     <tr
       style={{ fontWeight: bold ? 700 : 400, borderTop: borderTop ? `${borderTop} solid var(--border)` : undefined, cursor: "pointer" }}
@@ -941,6 +944,7 @@ function PeriodCard({ title, summary, start, end, onDrill }) {
   return (
     <div className="card period-card">
       <h2>{title}</h2>
+      {headerExtra}
       <table>
         <tbody>
           {COLLECTION_MODES.map((m) => (
@@ -1134,14 +1138,32 @@ function Dashboard({ settings, collections, referrals, expenses, doctorPays, cas
 
   const t = todayISO();
   const yest = (() => { const d = new Date(); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10); })();
-  const weekStart = (() => { const d = new Date(); d.setDate(d.getDate() - 6); return d.toISOString().slice(0, 10); })();
+  const twoDaysAgo = (() => { const d = new Date(); d.setDate(d.getDate() - 2); return d.toISOString().slice(0, 10); })();
   const monthStart = t.slice(0, 8) + "01";
   const monthLabel = new Date(t + "T00:00:00").toLocaleDateString("en-IN", { month: "long", year: "numeric" });
   const range = fyRange(fy);
 
+  // Week-of-month selector: "Week 1" = days 1–7, "Week 2" = days 8–14, and so
+  // on, for whichever month the person picks — not a fixed rolling 7 days.
+  const [weekMonth, setWeekMonth] = useState(t.slice(0, 7)); // "YYYY-MM"
+  const [weekNum, setWeekNum] = useState(Math.min(5, Math.ceil(Number(t.slice(8, 10)) / 7)));
+  const daysInWeekMonth = new Date(Number(weekMonth.slice(0, 4)), Number(weekMonth.slice(5, 7)), 0).getDate();
+  const weekOptions = Array.from({ length: Math.ceil(daysInWeekMonth / 7) }, (_, i) => i + 1);
+  const weekStartDay = (weekNum - 1) * 7 + 1;
+  const weekEndDay = Math.min(weekNum * 7, daysInWeekMonth);
+  const weekStart = `${weekMonth}-${String(weekStartDay).padStart(2, "0")}`;
+  const weekEnd = `${weekMonth}-${String(weekEndDay).padStart(2, "0")}`;
+  const weekMonthLabel = new Date(`${weekMonth}-01T00:00:00`).toLocaleDateString("en-IN", { month: "short", year: "numeric" });
+
   const todaySummary = periodSummary(collections, expenses, t, t);
   const yestSummary = periodSummary(collections, expenses, yest, yest);
-  const weekSummary = periodSummary(collections, expenses, weekStart, t);
+  const twoDaysAgoSummary = periodSummary(collections, expenses, twoDaysAgo, twoDaysAgo);
+  const weekSummary = periodSummary(collections, expenses, weekStart, weekEnd);
+  // Always the true "last 7 days," independent of the Week-of-month dropdown above —
+  // used only for the top insight banner and KPI cards, which should never silently
+  // change meaning just because someone picked a different week to look back at.
+  const rollingWeekStart = (() => { const d = new Date(); d.setDate(d.getDate() - 6); return d.toISOString().slice(0, 10); })();
+  const rollingWeekSummary = periodSummary(collections, expenses, rollingWeekStart, t);
   const monthSummary = periodSummary(collections, expenses, monthStart, t);
   const yearSummary = periodSummary(collections, expenses, range.start, range.end);
 
@@ -1179,7 +1201,7 @@ function Dashboard({ settings, collections, referrals, expenses, doctorPays, cas
   const prevWeekStart = (() => { const d = new Date(); d.setDate(d.getDate() - 13); return d.toISOString().slice(0, 10); })();
   const prevWeekSummary = periodSummary(collections, expenses, prevWeekStart, prevWeekEnd);
   const weekChangePct = prevWeekSummary.collectedTotal > 0
-    ? Math.round(((weekSummary.collectedTotal - prevWeekSummary.collectedTotal) / prevWeekSummary.collectedTotal) * 100)
+    ? Math.round(((rollingWeekSummary.collectedTotal - prevWeekSummary.collectedTotal) / prevWeekSummary.collectedTotal) * 100)
     : null;
 
   // Sparkline series: last 14 days of collected+expense, for the KPI cards
@@ -1217,8 +1239,8 @@ function Dashboard({ settings, collections, referrals, expenses, doctorPays, cas
       <div className="kpi-grid">
         <KpiCard icon="⚠️" label="Outstanding Dues" value={inr(outstanding)} color="var(--accent)" hint="Total unpaid balance across every collection entry, all time" />
         <KpiCard icon={(netProfit ?? 0) >= 0 ? "📈" : "📉"} label={`Net Profit (FY ${fy})`} value={netProfit === null ? "…" : inr(netProfit)} color={(netProfit ?? 0) >= 0 ? "#1F8A5F" : "#B3423A"} sparkline={last14Spark.map((s) => ({ v: s.net }))} sparklineColor={(netProfit ?? 0) >= 0 ? "#1F8A5F" : "#B3423A"} hint="Full P&L net profit for the financial year, last 14 days trend shown" />
-        <KpiCard icon="💰" label="This Week's Collection" value={inr(weekSummary.collectedTotal)} color="var(--primary-dark)" sparkline={sparkCollected} hint="Cash actually collected in the last 7 days" />
-        <KpiCard icon="🧾" label="This Week's Expenses" value={inr(weekSummary.expenseTotal)} color="var(--expense)" sparkline={sparkExpense} sparklineColor="var(--expense)" hint="Expenses logged in the last 7 days" />
+        <KpiCard icon="💰" label="This Week's Collection" value={inr(rollingWeekSummary.collectedTotal)} color="var(--primary-dark)" sparkline={sparkCollected} hint="Cash actually collected in the last 7 days" />
+        <KpiCard icon="🧾" label="This Week's Expenses" value={inr(rollingWeekSummary.expenseTotal)} color="var(--expense)" sparkline={sparkExpense} sparklineColor="var(--expense)" hint="Expenses logged in the last 7 days" />
       </div>
 
       {drill && <DrillDownPanel drill={drill} onClose={() => setDrill(null)} />}
@@ -1227,7 +1249,19 @@ function Dashboard({ settings, collections, referrals, expenses, doctorPays, cas
       <div className="period-grid">
         <PeriodCard title={formatDate(t)} summary={todaySummary} start={t} end={t} onDrill={openDrill} />
         <PeriodCard title={formatDate(yest)} summary={yestSummary} start={yest} end={yest} onDrill={openDrill} />
-        <PeriodCard title={`${formatDate(weekStart)} – ${formatDate(t)}`} summary={weekSummary} start={weekStart} end={t} onDrill={openDrill} />
+        <PeriodCard title={formatDate(twoDaysAgo)} summary={twoDaysAgoSummary} start={twoDaysAgo} end={twoDaysAgo} onDrill={openDrill} />
+        <PeriodCard
+          title={`Week ${weekNum} — ${weekMonthLabel}`} summary={weekSummary} start={weekStart} end={weekEnd} onDrill={openDrill}
+          headerExtra={
+            <div className="week-picker no-print">
+              <input type="month" value={weekMonth} onChange={(e) => { setWeekMonth(e.target.value); setWeekNum(1); }} />
+              <select value={weekNum} onChange={(e) => setWeekNum(Number(e.target.value))}>
+                {weekOptions.map((w) => <option key={w} value={w}>Week {w}</option>)}
+              </select>
+              <span className="week-range-label">{formatDate(weekStart)} – {formatDate(weekEnd)}</span>
+            </div>
+          }
+        />
         <PeriodCard title={monthLabel} summary={monthSummary} start={monthStart} end={t} onDrill={openDrill} />
         <PeriodCard title={`FY ${fy}`} summary={yearSummary} start={range.start} end={range.end} onDrill={openDrill} />
       </div>
