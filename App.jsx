@@ -766,6 +766,8 @@ export default function App() {
           .week-range-label{font-size:11px;color:var(--ink-soft);width:100%;}
           .kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-bottom:20px;}
           .kpi-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 18px;box-shadow:0 1px 4px rgba(10,40,36,.05);}
+          .kpi-card.clickable{cursor:pointer;transition:transform .12s ease,box-shadow .12s ease;}
+          .kpi-card.clickable:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(10,40,36,.12);}
           .kpi-top{display:flex;align-items:center;gap:8px;margin-bottom:10px;}
           .kpi-icon{font-size:20px;line-height:1;}
           .kpi-label{font-size:10.5px;text-transform:uppercase;letter-spacing:.8px;color:var(--ink-soft);font-weight:700;}
@@ -849,7 +851,7 @@ export default function App() {
             ) : (
               <>
                 {view === "launcher" && <LauncherGrid settings={settings} session={session} can={can} setView={setView} />}
-                {view === "dashboard" && <Dashboard settings={settings} collections={collections} referrals={referrals} expenses={expenses} doctorPays={doctorPays} cases={cases} fy={fy} />}
+                {view === "dashboard" && <Dashboard settings={settings} collections={collections} referrals={referrals} expenses={expenses} doctorPays={doctorPays} cases={cases} fy={fy} setView={setView} />}
                 {view === "cases" && can("cases", "view") && <CaseRecords cases={cases} addCase={addCase} updateCase={updateCase} removeCase={removeCase} doctors={doctors} patientsMaster={patientsMaster} can={can} />}
                 {view === "patientMaster" && can("cases", "view") && <PatientMaster can={can} patients={patientsMaster} addPatient={addPatientMaster} updatePatient={updatePatientMaster} removePatient={removePatientMaster} />}
                 {view === "patients" && can("cases", "view") && <PatientHistory can={can} updateCase={updateCase} updateCollection={updateCollection} cases={cases} doctors={doctors} />}
@@ -910,9 +912,9 @@ function Sparkline({ data, color = "#714B67", height = 34, width = 90 }) {
   );
 }
 
-function KpiCard({ icon, label, value, color, sparkline, sparklineColor, hint }) {
+function KpiCard({ icon, label, value, color, sparkline, sparklineColor, hint, onClick }) {
   return (
-    <div className="kpi-card" title={hint}>
+    <div className={"kpi-card" + (onClick ? " clickable" : "")} title={onClick ? `${hint || ""} — click for a detailed, exportable report`.trim() : hint} onClick={onClick} role={onClick ? "button" : undefined}>
       <div className="kpi-top">
         <span className="kpi-icon">{icon}</span>
         <span className="kpi-label">{label}</span>
@@ -1130,7 +1132,7 @@ function LauncherGrid({ settings, session, can, setView }) {
   );
 }
 
-function Dashboard({ settings, collections, referrals, expenses, doctorPays, cases, fy }) {
+function Dashboard({ settings, collections, referrals, expenses, doctorPays, cases, fy, setView }) {
   const { call } = useApi();
   const [income, setIncome] = useState(null);
   useEffect(() => { call(`/statements/income?fy=${fy}`).then(setIncome).catch(() => setIncome(null)); }, [call, fy]);
@@ -1171,11 +1173,12 @@ function Dashboard({ settings, collections, referrals, expenses, doctorPays, cas
   const enrichCollection = (c) => { const linked = c.caseId ? caseById[c.caseId] : null; return { ...c, shift: linked?.shift || "", doctorName: linked?.doctorName || "" }; };
 
   const openDrill = ({ kind, mode, start, end, label }) => {
+    const inRange = (d) => (!start || d >= start) && (!end || d <= end);
     if (kind === "expenses") {
-      setDrill({ title: `Expenses — ${label}`, kind: "expenses", rows: expenses.filter((e) => e.date >= start && e.date <= end) });
+      setDrill({ title: `Expenses — ${label}`, kind: "expenses", rows: expenses.filter((e) => inRange(e.date)) });
       return;
     }
-    let rows = collections.filter((c) => c.date >= start && c.date <= end).map(enrichCollection);
+    let rows = collections.filter((c) => inRange(c.date)).map(enrichCollection);
     let title = `All Collections — ${label}`;
     if (kind === "mode") { rows = rows.filter((c) => (c.mode || "Other") === mode); title = `${mode} Collections — ${label}`; }
     else if (kind === "outstanding") { rows = rows.filter((c) => Number(c.balance || 0) > 0); title = `Outstanding Due — ${label}`; }
@@ -1237,10 +1240,10 @@ function Dashboard({ settings, collections, referrals, expenses, doctorPays, cas
 
       <div className="section-header">Key Numbers</div>
       <div className="kpi-grid">
-        <KpiCard icon="⚠️" label="Outstanding Dues" value={inr(outstanding)} color="var(--accent)" hint="Total unpaid balance across every collection entry, all time" />
-        <KpiCard icon={(netProfit ?? 0) >= 0 ? "📈" : "📉"} label={`Net Profit (FY ${fy})`} value={netProfit === null ? "…" : inr(netProfit)} color={(netProfit ?? 0) >= 0 ? "#1F8A5F" : "#B3423A"} sparkline={last14Spark.map((s) => ({ v: s.net }))} sparklineColor={(netProfit ?? 0) >= 0 ? "#1F8A5F" : "#B3423A"} hint="Full P&L net profit for the financial year, last 14 days trend shown" />
-        <KpiCard icon="💰" label="This Week's Collection" value={inr(rollingWeekSummary.collectedTotal)} color="var(--primary-dark)" sparkline={sparkCollected} hint="Cash actually collected in the last 7 days" />
-        <KpiCard icon="🧾" label="This Week's Expenses" value={inr(rollingWeekSummary.expenseTotal)} color="var(--expense)" sparkline={sparkExpense} sparklineColor="var(--expense)" hint="Expenses logged in the last 7 days" />
+        <KpiCard icon="⚠️" label="Outstanding Dues" value={inr(outstanding)} color="var(--accent)" hint="Total unpaid balance across every collection entry, all time" onClick={() => openDrill({ kind: "outstanding", label: "All Time" })} />
+        <KpiCard icon={(netProfit ?? 0) >= 0 ? "📈" : "📉"} label={`Net Profit (FY ${fy})`} value={netProfit === null ? "…" : inr(netProfit)} color={(netProfit ?? 0) >= 0 ? "#1F8A5F" : "#B3423A"} sparkline={last14Spark.map((s) => ({ v: s.net }))} sparklineColor={(netProfit ?? 0) >= 0 ? "#1F8A5F" : "#B3423A"} hint="Full P&L net profit for the financial year — click for the full Income Statement, with its own custom-range PDF/Excel export" onClick={() => setView("statements")} />
+        <KpiCard icon="💰" label="This Week's Collection" value={inr(rollingWeekSummary.collectedTotal)} color="var(--primary-dark)" sparkline={sparkCollected} hint="Cash actually collected in the last 7 days" onClick={() => openDrill({ kind: "collected", start: rollingWeekStart, end: t, label: "This Week" })} />
+        <KpiCard icon="🧾" label="This Week's Expenses" value={inr(rollingWeekSummary.expenseTotal)} color="var(--expense)" sparkline={sparkExpense} sparklineColor="var(--expense)" hint="Expenses logged in the last 7 days" onClick={() => openDrill({ kind: "expenses", start: rollingWeekStart, end: t, label: "This Week" })} />
       </div>
 
       {drill && <DrillDownPanel drill={drill} onClose={() => setDrill(null)} />}
