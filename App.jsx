@@ -606,16 +606,30 @@ function AuthScreen({ onLogin, origin, setOrigin }) {
 }
 
 /* ============================== NAV / SHELL ============================== */
+const GROUP_COLORS = {
+  clinical: ["#2FADA0", "#0F6B60"], // teal
+  finance: ["#3FB86E", "#1F8A5F"], // green
+  operations: ["#E8A23D", "#B3781F"], // amber
+  admin: ["#8A97A8", "#5B6B78"], // grey
+  overview: ["#F4A340", "#E85D3D"], // orange — Dashboard sits outside the four groups
+};
+const GROUP_LABELS = { clinical: "Clinical Records", finance: "Finance", operations: "Operations", admin: "Admin" };
+
 const NAV = [
-  { key: "dashboard", label: "Dashboard", icon: "🏠", grad: ["#F4A340", "#E85D3D"] }, { key: "cases", label: "Case Records", module: "cases", icon: "📋", grad: ["#3FA9D9", "#1F6FA8"] },
-  { key: "patientMaster", label: "Patient Master", module: "cases", icon: "🧑‍🤝‍🧑", grad: ["#B45FC7", "#7C3AA6"] },
-  { key: "patients", label: "Patient History", module: "cases", icon: "🕒", grad: ["#4A90D9", "#1F5FA8"] },
-  { key: "collections", label: "Collections", module: "collections", icon: "💰", grad: ["#3FB86E", "#1F8A5F"] }, { key: "doctors", label: "Doctor Shifts & Pay", module: "doctorPay", icon: "🩺", grad: ["#E8557D", "#B3336B"] },
-  { key: "referrals", label: "Referral Income", module: "referrals", icon: "🔗", grad: ["#5C7FE8", "#3B4FC7"] }, { key: "gifts", label: "Gifts Register", module: "gifts", icon: "🎁", grad: ["#E85D8A", "#C7336B"] },
-  { key: "expenses", label: "Expenses", module: "expenses", icon: "🧾", grad: ["#E8823D", "#B3423A"] }, { key: "assets", label: "Fixed Assets", module: "assets", icon: "🏢", grad: ["#6C7B95", "#3E4A63"] },
-  { key: "statements", label: "Financial Statements", module: "statements", icon: "📊", grad: ["#7C6FD9", "#4F3FA8"] }, { key: "settings", label: "Settings", icon: "⚙️", grad: ["#8A97A8", "#5B6B78"] },
-  { key: "auditLog", label: "User Access Report", module: "auditLog", icon: "🔍", grad: ["#2FADA0", "#1B6E7A"] },
-  { key: "admin", label: "User Approvals", adminOnly: true, icon: "✅", grad: ["#4FB88A", "#1F8A5F"] },
+  { key: "dashboard", label: "Dashboard", icon: "🏠", group: "overview", desc: "Live KPIs, daily/weekly/monthly snapshots, and trend charts." },
+  { key: "cases", label: "Case Records", module: "cases", icon: "📋", group: "clinical", desc: "Log patient visits, medicines dispensed, and case papers." },
+  { key: "patientMaster", label: "Patient Master", module: "cases", icon: "🧑‍🤝‍🧑", group: "clinical", desc: "The patient registry — name, mobile, gender, DOB, address, auto-calculated age." },
+  { key: "patients", label: "Patient History", module: "cases", icon: "🕒", group: "clinical", desc: "A single patient's full visit and payment history in one place." },
+  { key: "collections", label: "Collections", module: "collections", icon: "💰", group: "finance", desc: "Payments due and collected, by mode — Cash, UPI, Card, Other." },
+  { key: "expenses", label: "Expenses", module: "expenses", icon: "🧾", group: "finance", desc: "Consumables, rent, staff payout, utilities, and other clinic expenses." },
+  { key: "assets", label: "Fixed Assets", module: "assets", icon: "🏢", group: "finance", desc: "Equipment and property register, with automatic depreciation." },
+  { key: "statements", label: "Financial Statements", module: "statements", icon: "📊", group: "finance", desc: "Income Statement, Balance Sheet, and Capital Account." },
+  { key: "doctors", label: "Doctor Shifts & Pay", module: "doctorPay", icon: "🩺", group: "operations", desc: "Doctor roster, shifts, and payout tracking." },
+  { key: "referrals", label: "Referral Income", module: "referrals", icon: "🔗", group: "operations", desc: "Income from patient referrals to and from other providers." },
+  { key: "gifts", label: "Gifts Register", module: "gifts", icon: "🎁", group: "operations", desc: "Gifts received from medical reps, for compliance record-keeping." },
+  { key: "settings", label: "Settings", icon: "⚙️", group: "admin", desc: "Clinic profile, capital account, unsecured loans, and security deposits." },
+  { key: "auditLog", label: "User Access Report", module: "auditLog", icon: "🔍", group: "admin", desc: "Who accessed which module and when — a full audit trail." },
+  { key: "admin", label: "User Approvals", adminOnly: true, icon: "✅", group: "admin", desc: "Approve new staff accounts and manage permissions." },
 ];
 
 export default function App() {
@@ -759,6 +773,12 @@ export default function App() {
           .launcher-tile:hover{transform:translateY(-3px);box-shadow:0 8px 20px rgba(80,60,120,.14);}
           .launcher-icon{width:52px;height:52px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:24px;box-shadow:0 3px 8px rgba(0,0,0,.15);}
           .launcher-label{font-size:12.5px;font-weight:600;color:var(--ink);text-align:center;line-height:1.3;}
+          .launcher-stat{font-size:10.5px;color:var(--ink-soft);text-align:center;line-height:1.3;margin-top:-2px;}
+          .launcher-section{margin-bottom:28px;}
+          .launcher-section-label{font-size:11.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;margin-bottom:12px;}
+          .quick-action-row{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:30px;}
+          .quick-action-btn{background:#fff;border:1.5px solid var(--primary);color:var(--primary);font-weight:700;font-size:13px;padding:10px 18px;border-radius:10px;cursor:pointer;transition:background .12s ease,color .12s ease;}
+          .quick-action-btn:hover{background:var(--primary);color:#fff;}
           @media(max-width:640px){ .launcher-grid{grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:12px;} .launcher-wrap{padding:22px 14px;} }
           .period-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-bottom:18px;}
           .week-picker{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:-4px 0 10px;}
@@ -836,7 +856,7 @@ export default function App() {
           <div className="brand" style={{ cursor: "pointer" }} onClick={() => setView("launcher")} title="Back to app launcher">GANATRA CLINIC</div>
           <div className="biz">{settings.proprietor}<br />{session.name} ({session.userId}) · {session.role}<br /><span style={{ opacity: .7 }}>{origin}</span></div>
           <button className={"nav-item" + (view === "launcher" ? " active" : "")} onClick={() => setView("launcher")}><span className="nav-icon-chip" style={{ background: `linear-gradient(135deg, #F4A340, #E85D3D)` }}>🔷</span>Home</button>
-          {NAV.filter((n) => !n.adminOnly || session.role === "Admin").filter((n) => !n.module || can(n.module, "view")).map((n) => (<button key={n.key} className={"nav-item" + (view === n.key ? " active" : "")} onClick={() => setView(n.key)}><span className="nav-icon-chip" style={{ background: `linear-gradient(135deg, ${n.grad[0]}, ${n.grad[1]})` }}>{n.icon}</span>{n.label}</button>))}
+          {NAV.filter((n) => !n.adminOnly || session.role === "Admin").filter((n) => !n.module || can(n.module, "view")).map((n) => { const g = GROUP_COLORS[n.group]; return (<button key={n.key} className={"nav-item" + (view === n.key ? " active" : "")} onClick={() => setView(n.key)}><span className="nav-icon-chip" style={{ background: `linear-gradient(135deg, ${g[0]}, ${g[1]})` }}>{n.icon}</span>{n.label}</button>); })}
           <button className="logout" onClick={() => setSession(null)}>Log out</button>
         </nav>
 
@@ -850,7 +870,7 @@ export default function App() {
               <div className="card"><h2>Couldn't load your data</h2><ErrorNote msg={loadError} /><button className="btn" style={{ marginTop: 10 }} onClick={reloadAll} type="button">Retry</button></div>
             ) : (
               <>
-                {view === "launcher" && <LauncherGrid settings={settings} session={session} can={can} setView={setView} />}
+                {view === "launcher" && <LauncherGrid settings={settings} session={session} can={can} setView={setView} cases={cases} collections={collections} expenses={expenses} doctorPays={doctorPays} referrals={referrals} gifts={gifts} doctors={doctors} patientsMaster={patientsMaster} />}
                 {view === "dashboard" && <Dashboard settings={settings} collections={collections} referrals={referrals} expenses={expenses} doctorPays={doctorPays} cases={cases} fy={fy} setView={setView} />}
                 {view === "cases" && can("cases", "view") && <CaseRecords cases={cases} addCase={addCase} updateCase={updateCase} removeCase={removeCase} doctors={doctors} patientsMaster={patientsMaster} can={can} />}
                 {view === "patientMaster" && can("cases", "view") && <PatientMaster can={can} patients={patientsMaster} addPatient={addPatientMaster} updatePatient={updatePatientMaster} removePatient={removePatientMaster} />}
@@ -1108,26 +1128,81 @@ function ShiftCollectionChart({ collections, cases, fy }) {
   );
 }
 
-/** A colorful grid-tile home screen (Odoo-style app launcher) — each module
- *  gets its own gradient-colored icon tile. Purely a navigation surface; it
- *  doesn't fetch or show any data itself, so it carries no security surface
- *  beyond the same view-permission filtering already applied everywhere else. */
-function LauncherGrid({ settings, session, can, setView }) {
+/** A colorful grid-tile home screen (Odoo-style app launcher), grouped into
+ *  Clinical/Finance/Operations/Admin sections with live micro-stats. All
+ *  stats are computed client-side from data already loaded elsewhere in the
+ *  app — no new API calls, no new attack surface, and every tile still
+ *  respects the exact same view-permission filter used everywhere else. */
+function LauncherGrid({ settings, session, can, setView, cases, collections, expenses, doctorPays, referrals, gifts, doctors, patientsMaster }) {
   const tiles = NAV.filter((n) => !n.adminOnly || session.role === "Admin").filter((n) => !n.module || can(n.module, "view"));
+  const overview = tiles.filter((n) => n.group === "overview");
+  const grouped = ["clinical", "finance", "operations", "admin"].map((g) => ({ group: g, items: tiles.filter((n) => n.group === g) })).filter((g) => g.items.length > 0);
+
+  const t = todayISO();
+  const weekStart = (() => { const d = new Date(); d.setDate(d.getDate() - 6); return d.toISOString().slice(0, 10); })();
+  const monthStart = t.slice(0, 8) + "01";
+
+  // Micro-stats: only shown where a genuinely meaningful, honestly-computed
+  // number exists — no stat is invented just to fill space.
+  const microStats = {
+    cases: `${cases.filter((c) => c.date === t).length} case(s) today`,
+    patientMaster: `${patientsMaster.length} patient(s) registered`,
+    collections: `${inr(collections.filter((c) => c.date === t).reduce((s, c) => s + Number(c.amountCollected || 0), 0))} today`,
+    expenses: `${inr(expenses.filter((e) => e.date >= weekStart && e.date <= t).reduce((s, e) => s + Number(e.amount || 0), 0))} this week`,
+    referrals: `${inr(referrals.filter((r) => r.date >= monthStart && r.date <= t).reduce((s, r) => s + Number(r.amount || 0), 0))} this month`,
+    gifts: `${gifts.filter((g) => g.date >= monthStart && g.date <= t).length} gift(s) this month`,
+    doctors: (() => {
+      const paidKeys = new Set(doctorPays.filter((p) => p.date >= weekStart && p.date <= t).map((p) => `${p.doctorId}|${p.date}`));
+      const workedKeys = new Set(cases.filter((c) => c.date >= weekStart && c.date <= t && c.doctorId).map((c) => `${c.doctorId}|${c.date}`));
+      const pending = [...workedKeys].filter((k) => !paidKeys.has(k)).length;
+      return `${pending} shift-day(s) pending payout`;
+    })(),
+  };
+
+  const quickActions = [
+    { label: "➕ Add new patient", view: "patientMaster" },
+    { label: "💰 Record collection", view: "collections" },
+    { label: "🧾 Add expense", view: "expenses" },
+  ].filter((a) => { const nav = NAV.find((n) => n.key === a.view); return !nav.module || can(nav.module, "write"); });
+
+  const Tile = ({ n }) => {
+    const g = GROUP_COLORS[n.group];
+    return (
+      <button className="launcher-tile" onClick={() => setView(n.key)} title={n.desc}>
+        <span className="launcher-icon" style={{ background: `linear-gradient(135deg, ${g[0]}, ${g[1]})` }}>{n.icon}</span>
+        <span className="launcher-label">{n.label}</span>
+        {microStats[n.key] && <span className="launcher-stat">{microStats[n.key]}</span>}
+      </button>
+    );
+  };
+
   return (
     <div className="launcher-wrap">
       <div className="launcher-header">
         <h2>{settings.clinicName || "Ganatra Clinic"}</h2>
         <p>Welcome back, {session.name.split(" ")[0]} — pick where you want to go.</p>
       </div>
-      <div className="launcher-grid">
-        {tiles.map((n) => (
-          <button key={n.key} className="launcher-tile" onClick={() => setView(n.key)}>
-            <span className="launcher-icon" style={{ background: `linear-gradient(135deg, ${n.grad[0]}, ${n.grad[1]})` }}>{n.icon}</span>
-            <span className="launcher-label">{n.label}</span>
-          </button>
-        ))}
-      </div>
+
+      {quickActions.length > 0 && (
+        <div className="quick-action-row no-print">
+          {quickActions.map((a) => <button key={a.view} className="quick-action-btn" onClick={() => setView(a.view)}>{a.label}</button>)}
+        </div>
+      )}
+
+      {overview.length > 0 && (
+        <div className="launcher-grid" style={{ marginBottom: 26 }}>
+          {overview.map((n) => <Tile key={n.key} n={n} />)}
+        </div>
+      )}
+
+      {grouped.map(({ group, items }) => (
+        <div key={group} className="launcher-section">
+          <div className="launcher-section-label" style={{ color: GROUP_COLORS[group][1] }}>{GROUP_LABELS[group]}</div>
+          <div className="launcher-grid">
+            {items.map((n) => <Tile key={n.key} n={n} />)}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
