@@ -244,6 +244,80 @@ const mapCapital = (r) => ({ id: r.id, date: d10(r.txn_date), type: r.txn_type, 
 const mapSettings = (r) => ({ clinicName: r.clinic_name || "Ganatra Clinic", proprietor: r.proprietor || "Dr. Bhavisha Pratik Ganatra", address: r.address || "", phone: r.phone || "" });
 
 /* -------- Image capture: upload, rotate to align, attach via API -------- */
+/** Displays a user's avatar — fetched the same authenticated way as every
+ *  other photo in this app (never a plain public <img src>). Falls back to
+ *  a colored initials circle when there's no avatar set, or while it loads. */
+function Avatar({ url, name, size = 34 }) {
+  const { origin, token } = useApi();
+  const [blobUrl, setBlobUrl] = useState(null);
+  useEffect(() => {
+    let objectUrl;
+    if (url) {
+      fetch(`${origin}${url}`, { headers: { Authorization: `Bearer ${token}` } })
+        .then((r) => (r.ok ? r.blob() : Promise.reject()))
+        .then((blob) => { objectUrl = URL.createObjectURL(blob); setBlobUrl(objectUrl); })
+        .catch(() => setBlobUrl(null));
+    } else {
+      setBlobUrl(null);
+    }
+    return () => { if (objectUrl) URL.revokeObjectURL(objectUrl); };
+  }, [url, origin, token]);
+
+  const initials = (name || "?").trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
+  const style = { width: size, height: size, borderRadius: "50%", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", fontWeight: 700, fontSize: size * 0.38, color: "#fff", background: "linear-gradient(135deg, #714B67, #4A2F44)" };
+  return blobUrl
+    ? <img src={blobUrl} alt={name} style={{ ...style, objectFit: "cover" }} />
+    : <div style={style}>{initials}</div>;
+}
+
+/** A minimal profile-picture uploader: pick a file, it's cropped to a
+ *  centered square and downsized client-side before upload, same
+ *  authenticated /api/upload path every other photo in the app uses. */
+function AvatarUploader({ currentUrl, name, onUploaded }) {
+  const { call } = useApi();
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const inputRef = useRef();
+
+  const onFile = (e) => {
+    const f = e.target.files[0]; if (!f) return;
+    setErr(""); setBusy(true);
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const side = Math.min(img.width, img.height);
+        const sx = (img.width - side) / 2, sy = (img.height - side) / 2;
+        const canvas = document.createElement("canvas");
+        canvas.width = 300; canvas.height = 300;
+        canvas.getContext("2d").drawImage(img, sx, sy, side, side, 0, 0, 300, 300);
+        canvas.toBlob(async (blob) => {
+          try {
+            const fd = new FormData();
+            fd.append("photo", blob, "avatar.jpg");
+            const uploadResult = await call("/upload", { method: "POST", body: fd, isForm: true });
+            await onUploaded(uploadResult.url);
+          } catch (e) { setErr(e.message); }
+          setBusy(false);
+        }, "image/jpeg", 0.88);
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(f); e.target.value = "";
+  };
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+      <Avatar url={currentUrl} name={name} size={56} />
+      <div>
+        <input ref={inputRef} type="file" accept="image/*" onChange={onFile} style={{ display: "none" }} />
+        <button className="btn secondary small" type="button" disabled={busy} onClick={() => inputRef.current && inputRef.current.click()}>{busy ? "Uploading…" : "Change photo"}</button>
+        <ErrorNote msg={err} />
+      </div>
+    </div>
+  );
+}
+
 function ImageCapture({ value, onChange }) {
   const { call, origin, token } = useApi();
   const [raw, setRaw] = useState(null);
@@ -638,6 +712,8 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [view, setView] = useState("launcher");
+  const [pendingSearch, setPendingSearch] = useState(null);
+  const clearPendingSearch = useCallback(() => setPendingSearch(null), []);
   const [fy, setFy] = useState(fyOf(todayISO()));
 
   const [settings, setSettings] = useState({ clinicName: "Ganatra Clinic", proprietor: "Dr. Bhavisha Pratik Ganatra", address: "", phone: "" });
@@ -734,6 +810,7 @@ export default function App() {
   const updatePatientMaster = useCallback(async (id, body) => { const r = await call(`/patient-master/${id}`, { method: "PUT", body }); setPatientsMaster((p) => p.map((x) => (x.id === id ? mapPatientMaster(r) : x))); }, [call]);
   const removePatientMaster = useCallback(async (id) => { await call(`/patient-master/${id}`, { method: "DELETE" }); setPatientsMaster((p) => p.filter((x) => x.id !== id)); }, [call]);
   const updateSettings = useCallback(async (body) => { const r = await call("/settings", { method: "PUT", body }); setSettings(mapSettings(r)); }, [call]);
+  const updateAvatar = useCallback(async (imageUrl) => { const r = await call("/auth/me/avatar", { method: "PUT", body: { imageUrl } }); setSession((s) => ({ ...s, avatarUrl: r.avatarUrl })); }, [call]);
 
   if (!session) return <AuthScreen onLogin={setSession} origin={origin} setOrigin={setOrigin} />;
 
@@ -765,6 +842,12 @@ export default function App() {
           .logout{margin-top:auto;padding:12px 20px;font-size:12px;color:#E9CFCF;background:none;border:none;text-align:left;cursor:pointer;text-decoration:underline;}
           .main{flex:1;min-width:0;}
           .topbar{background:var(--surface);border-bottom:2px solid var(--accent);padding:14px 26px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;}
+          .topbar-right{display:flex;align-items:center;gap:12px;}
+          .user-chip{display:flex;align-items:center;gap:8px;background:none;border:1px solid var(--border);border-radius:24px;padding:4px 12px 4px 4px;cursor:pointer;transition:background .12s ease;}
+          .user-chip:hover{background:#F6F3FC;}
+          .user-chip-text{display:flex;flex-direction:column;line-height:1.2;text-align:left;}
+          .user-chip-name{font-size:12.5px;font-weight:700;color:var(--ink);}
+          .user-chip-role{font-size:10.5px;color:var(--ink-soft);}
           .topbar h1{font-family:'Plus Jakarta Sans',sans-serif;font-size:19px;margin:0;}
           .fy-select{font-family:'IBM Plex Mono',monospace;background:#fff;border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:13px;}
           .content{padding:22px 26px 60px;max-width:1150px;}
@@ -812,6 +895,18 @@ export default function App() {
           .role-stat:hover{background:#F6F3FC;}
           .role-stat-value{display:block;font-size:20px;font-weight:800;color:var(--primary-dark);}
           .role-stat-label{display:block;font-size:11.5px;color:var(--ink-soft);margin-top:2px;}
+          .toggle-switch{position:relative;display:inline-flex;width:42px;height:23px;cursor:pointer;vertical-align:middle;}
+          .toggle-switch input{position:absolute;opacity:0;width:0;height:0;}
+          .toggle-track{position:absolute;inset:0;background:#CFFAFE;border-radius:999px;transition:background .2s ease,box-shadow .2s ease;
+            box-shadow:inset 0 1.5px 3px rgba(8,58,66,.14),inset 0 0 0 1px rgba(8,58,66,.05);}
+          .toggle-thumb{position:absolute;top:2.5px;left:2.5px;width:18px;height:18px;border-radius:50%;
+            background:linear-gradient(160deg,#ffffff,#F1FBFD);
+            box-shadow:0 1px 3px rgba(8,58,66,.3),0 0 0 1px rgba(8,58,66,.05),inset 0 1px 1px rgba(255,255,255,.9);
+            transition:transform .22s cubic-bezier(.34,1.56,.64,1);}
+          .toggle-switch input:checked + .toggle-track{background:#22D3EE;box-shadow:inset 0 1.5px 3px rgba(8,58,66,.1),0 0 10px rgba(34,211,238,.55);}
+          .toggle-switch input:checked + .toggle-track .toggle-thumb{transform:translateX(19px);box-shadow:0 1px 4px rgba(8,58,66,.35),0 0 0 1px rgba(8,58,66,.05),inset 0 1px 1px rgba(255,255,255,.9);}
+          .toggle-switch input:focus-visible + .toggle-track{outline:2px solid #22D3EE;outline-offset:2px;}
+          .toggle-switch:hover .toggle-thumb{box-shadow:0 1px 5px rgba(8,58,66,.4),0 0 0 1px rgba(8,58,66,.05),inset 0 1px 1px rgba(255,255,255,.9);}
           .activity-feed{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;}
           .activity-col{background:#fff;border:1px solid #EAE6F5;border-radius:12px;padding:14px 16px;}
           .activity-col-title{font-size:12px;font-weight:700;color:var(--ink);margin-bottom:8px;}
@@ -894,7 +989,10 @@ export default function App() {
 
         <nav className="sidebar">
           <div className="brand" style={{ cursor: "pointer" }} onClick={() => setView("launcher")} title="Back to app launcher">GANATRA CLINIC</div>
-          <div className="biz">{settings.proprietor}<br />{session.name} ({session.userId}) · {session.role}<br /><span style={{ opacity: .7 }}>{origin}</span></div>
+          <div className="biz" style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <Avatar url={session.avatarUrl} name={session.name} size={38} />
+            <span>{settings.proprietor}<br />{session.name} ({session.userId}) · {session.role}<br /><span style={{ opacity: .7 }}>{origin}</span></span>
+          </div>
           <button className={"nav-item" + (view === "launcher" ? " active" : "")} onClick={() => setView("launcher")}><span className="nav-icon-chip" style={{ background: `linear-gradient(135deg, #F4A340, #E85D3D)` }}><span>🔷</span></span>Home</button>
           {NAV.filter((n) => !n.adminOnly || session.role === "Admin").filter((n) => !n.module || can(n.module, "view")).map((n) => { const g = GROUP_COLORS[n.group]; return (<button key={n.key} className={"nav-item" + (view === n.key ? " active" : "")} onClick={() => setView(n.key)}><span className="nav-icon-chip" style={{ background: `linear-gradient(135deg, ${g[0]}, ${g[1]})` }}><span>{n.icon}</span></span>{n.label}</button>); })}
           <button className="logout" onClick={() => setSession(null)}>Log out</button>
@@ -903,27 +1001,33 @@ export default function App() {
         <div className="main">
           <div className="topbar" style={view === "launcher" ? { visibility: "hidden", height: 0, overflow: "hidden", padding: 0, margin: 0, border: "none" } : undefined}>
             <h1>{NAV.find((n) => n.key === view)?.label || "Home"}</h1>
-            <select className="fy-select no-print" value={fy} onChange={(e) => setFy(e.target.value)}>{last4FYs().map((f) => <option key={f} value={f}>FY {f}</option>)}</select>
+            <div className="topbar-right no-print">
+              <select className="fy-select" value={fy} onChange={(e) => setFy(e.target.value)}>{last4FYs().map((f) => <option key={f} value={f}>FY {f}</option>)}</select>
+              <button className="user-chip" onClick={() => setView("settings")} title="Go to Settings to change your profile photo">
+                <Avatar url={session.avatarUrl} name={session.name} size={30} />
+                <span className="user-chip-text"><span className="user-chip-name">{session.name}</span><span className="user-chip-role">{session.role}</span></span>
+              </button>
+            </div>
           </div>
           <div className="content">
             {loading ? <div className="empty">Loading clinic records from the server…</div> : loadError ? (
               <div className="card"><h2>Couldn't load your data</h2><ErrorNote msg={loadError} /><button className="btn" style={{ marginTop: 10 }} onClick={reloadAll} type="button">Retry</button></div>
             ) : (
               <>
-                {view === "launcher" && <LauncherGrid settings={settings} session={session} can={can} setView={setView} cases={cases} collections={collections} expenses={expenses} doctorPays={doctorPays} referrals={referrals} gifts={gifts} doctors={doctors} patientsMaster={patientsMaster} />}
+                {view === "launcher" && <LauncherGrid settings={settings} session={session} can={can} setView={setView} setPendingSearch={setPendingSearch} cases={cases} collections={collections} expenses={expenses} doctorPays={doctorPays} referrals={referrals} gifts={gifts} doctors={doctors} patientsMaster={patientsMaster} />}
                 {view === "dashboard" && <Dashboard settings={settings} collections={collections} referrals={referrals} expenses={expenses} doctorPays={doctorPays} cases={cases} fy={fy} setView={setView} />}
-                {view === "cases" && can("cases", "view") && <CaseRecords cases={cases} addCase={addCase} updateCase={updateCase} removeCase={removeCase} doctors={doctors} patientsMaster={patientsMaster} can={can} />}
-                {view === "patientMaster" && can("cases", "view") && <PatientMaster can={can} patients={patientsMaster} addPatient={addPatientMaster} updatePatient={updatePatientMaster} removePatient={removePatientMaster} />}
+                {view === "cases" && can("cases", "view") && <CaseRecords cases={cases} addCase={addCase} updateCase={updateCase} removeCase={removeCase} doctors={doctors} patientsMaster={patientsMaster} pendingSearch={view === "cases" ? pendingSearch : null} clearPendingSearch={clearPendingSearch} can={can} />}
+                {view === "patientMaster" && can("cases", "view") && <PatientMaster can={can} patients={patientsMaster} addPatient={addPatientMaster} updatePatient={updatePatientMaster} removePatient={removePatientMaster} pendingSearch={view === "patientMaster" ? pendingSearch : null} clearPendingSearch={clearPendingSearch} />}
                 {view === "patients" && can("cases", "view") && <PatientHistory can={can} updateCase={updateCase} updateCollection={updateCollection} cases={cases} doctors={doctors} />}
-                {view === "collections" && can("collections", "view") && <Collections collections={collections} addCollection={addCollection} updateCollection={updateCollection} removeCollection={removeCollection} cases={cases} fy={fy} can={can} />}
+                {view === "collections" && can("collections", "view") && <Collections collections={collections} addCollection={addCollection} updateCollection={updateCollection} removeCollection={removeCollection} cases={cases} fy={fy} pendingSearch={view === "collections" ? pendingSearch : null} clearPendingSearch={clearPendingSearch} can={can} />}
                 {view === "doctors" && can("doctorPay", "view") && <DoctorShifts doctors={doctors} addDoctor={addDoctor} updateDoctor={updateDoctor} removeDoctor={removeDoctor} doctorPays={doctorPays} addDoctorPay={addDoctorPay} updateDoctorPay={updateDoctorPay} removeDoctorPay={removeDoctorPay} can={can} />}
                 {view === "referrals" && can("referrals", "view") && <Referrals referrals={referrals} addReferral={addReferral} updateReferral={updateReferral} removeReferral={removeReferral} fy={fy} can={can} />}
                 {view === "gifts" && can("gifts", "view") && <Gifts gifts={gifts} addGift={addGift} updateGift={updateGift} removeGift={removeGift} doctors={doctors} can={can} />}
-                {view === "expenses" && can("expenses", "view") && <Expenses expenses={expenses} addExpense={addExpense} updateExpense={updateExpense} removeExpense={removeExpense} fy={fy} can={can} />}
+                {view === "expenses" && can("expenses", "view") && <Expenses expenses={expenses} addExpense={addExpense} updateExpense={updateExpense} removeExpense={removeExpense} fy={fy} pendingSearch={view === "expenses" ? pendingSearch : null} clearPendingSearch={clearPendingSearch} can={can} />}
                 {view === "assets" && can("assets", "view") && <FixedAssets assets={assets} addAsset={addAsset} updateAsset={updateAsset} removeAsset={removeAsset} fy={fy} can={can} />}
                 {view === "statements" && can("statements", "view") && <FinancialStatements fy={fy} settings={settings} can={can} />}
                 {view === "auditLog" && can("auditLog", "view") && <AccessReport can={can} />}
-                {view === "settings" && <SettingsPage settings={settings} updateSettings={updateSettings} session={session} origin={origin} capital={capital} addCapital={addCapital} removeCapital={removeCapital} loans={loans} deposits={deposits} addOtherBalance={addOtherBalance} updateOtherBalance={updateOtherBalance} removeOtherBalance={removeOtherBalance} can={can} />}
+                {view === "settings" && <SettingsPage settings={settings} updateSettings={updateSettings} session={session} origin={origin} capital={capital} addCapital={addCapital} removeCapital={removeCapital} loans={loans} deposits={deposits} addOtherBalance={addOtherBalance} updateOtherBalance={updateOtherBalance} removeOtherBalance={removeOtherBalance} updateAvatar={updateAvatar} can={can} />}
                 {view === "admin" && session.role === "Admin" && <AdminUsers />}
               </>
             )}
@@ -1173,7 +1277,7 @@ function ShiftCollectionChart({ collections, cases, fy }) {
  *  stats are computed client-side from data already loaded elsewhere in the
  *  app — no new API calls, no new attack surface, and every tile still
  *  respects the exact same view-permission filter used everywhere else. */
-function LauncherGrid({ settings, session, can, setView, cases, collections, expenses, doctorPays, referrals, gifts, doctors, patientsMaster }) {
+function LauncherGrid({ settings, session, can, setView, setPendingSearch, cases, collections, expenses, doctorPays, referrals, gifts, doctors, patientsMaster }) {
   const { call } = useApi();
   const tiles = NAV.filter((n) => !n.adminOnly || session.role === "Admin").filter((n) => !n.module || can(n.module, "view"));
   const overview = tiles.filter((n) => n.group === "overview");
@@ -1271,22 +1375,22 @@ function LauncherGrid({ settings, session, can, setView, cases, collections, exp
               <>
                 {searchResults.patients.length > 0 && (
                   <div className="search-group"><div className="search-group-label">🧑‍🤝‍🧑 Patients</div>
-                    {searchResults.patients.map((p) => <div key={p.id} className="search-item" onClick={() => { setView("patientMaster"); setSearchOpen(false); }}>{p.name}{p.mobile ? ` — ${p.mobile}` : ""}</div>)}
+                    {searchResults.patients.map((p) => <div key={p.id} className="search-item" onClick={() => { setPendingSearch(query); setView("patientMaster"); setSearchOpen(false); }}>{p.name}{p.mobile ? ` — ${p.mobile}` : ""}</div>)}
                   </div>
                 )}
                 {searchResults.cases.length > 0 && (
                   <div className="search-group"><div className="search-group-label">📋 Case Records</div>
-                    {searchResults.cases.map((c) => <div key={c.id} className="search-item" onClick={() => { setView("cases"); setSearchOpen(false); }}>{c.caseNo} — {c.patientName}</div>)}
+                    {searchResults.cases.map((c) => <div key={c.id} className="search-item" onClick={() => { setPendingSearch(query); setView("cases"); setSearchOpen(false); }}>{c.caseNo} — {c.patientName}</div>)}
                   </div>
                 )}
                 {searchResults.collections.length > 0 && (
                   <div className="search-group"><div className="search-group-label">💰 Collections</div>
-                    {searchResults.collections.map((c) => <div key={c.id} className="search-item" onClick={() => { setView("collections"); setSearchOpen(false); }}>{c.patientName} — {inr(c.amountCollected)} ({c.date})</div>)}
+                    {searchResults.collections.map((c) => <div key={c.id} className="search-item" onClick={() => { setPendingSearch(query); setView("collections"); setSearchOpen(false); }}>{c.patientName} — {inr(c.amountCollected)} ({c.date})</div>)}
                   </div>
                 )}
                 {searchResults.expenses.length > 0 && (
                   <div className="search-group"><div className="search-group-label">🧾 Expenses</div>
-                    {searchResults.expenses.map((e) => <div key={e.id} className="search-item" onClick={() => { setView("expenses"); setSearchOpen(false); }}>{e.category} — {inr(e.amount)} ({e.date})</div>)}
+                    {searchResults.expenses.map((e) => <div key={e.id} className="search-item" onClick={() => { setPendingSearch(query); setView("expenses"); setSearchOpen(false); }}>{e.category} — {inr(e.amount)} ({e.date})</div>)}
                   </div>
                 )}
               </>
@@ -1550,7 +1654,7 @@ function Dashboard({ settings, collections, referrals, expenses, doctorPays, cas
 }
 
 /* ============================== CASE RECORDS ============================== */
-function CaseRecords({ cases, addCase, updateCase, removeCase, doctors, patientsMaster, can }) {
+function CaseRecords({ cases, addCase, updateCase, removeCase, doctors, patientsMaster, pendingSearch, clearPendingSearch, can }) {
   const blank = { date: todayISO(), patientName: "", phone: "", briefHistory: "", doctorId: doctors[0]?.id || "", shift: "Morning", externalPrescription: "", image: null };
   const [form, setForm] = useState(blank);
   const [meds, setMeds] = useState([{ name: "", qty: "", price: "" }]);
@@ -1590,8 +1694,13 @@ function CaseRecords({ cases, addCase, updateCase, removeCase, doctors, patients
   };
   const remove = async (id) => { try { await removeCase(id); if (editingId === id) cancelEdit(); } catch (e) { setErr(e.message); } };
   const medValue = (c) => (c.medicines || []).reduce((s, m) => s + m.qty * m.price, 0);
+  const [registerQuery, setRegisterQuery] = useState("");
+  useEffect(() => { if (pendingSearch) { setRegisterQuery(pendingSearch); clearPendingSearch(); } }, [pendingSearch, clearPendingSearch]);
+  const filteredCases = registerQuery.trim()
+    ? cases.filter((c) => c.patientName.toLowerCase().includes(registerQuery.toLowerCase()) || c.caseNo.toLowerCase().includes(registerQuery.toLowerCase()) || (c.briefHistory || "").toLowerCase().includes(registerQuery.toLowerCase()))
+    : cases;
   const caseColumns = { caseNo: (c) => c.caseNo, date: (c) => c.date, patientName: (c) => c.patientName, doctorName: (c) => c.doctorName || "", shift: (c) => c.shift || "", briefHistory: (c) => c.briefHistory || "", medValue: (c) => medValue(c) };
-  const { sorted: sortedCases, Th: CaseTh } = useSortableRows(cases, caseColumns, "date", "desc");
+  const { sorted: sortedCases, Th: CaseTh } = useSortableRows(filteredCases, caseColumns, "date", "desc");
 
   // ---- Bulk upload: download a template, then parse a filled-in copy ----
   const TEMPLATE_HEADERS = ["Date (YYYY-MM-DD)", "Patient Name", "Phone", "Doctor", "Shift (Morning/Evening)", "Brief Medical History", "Medicine Name", "Quantity", "Indicative Unit Price", "Amount Due (₹, optional)", "Mode of Payment (Cash/UPI/Card/Other, optional)"];
@@ -1746,7 +1855,8 @@ function CaseRecords({ cases, addCase, updateCase, removeCase, doctors, patients
         <div className="note-box">Loose-medicine values are for clinical/inventory reference only — not posted as a separate expense, since "Medicine Bills" already covers what the clinic pays its supplier.</div>
       </div>
       <div className="card">
-        <h2>Case register</h2>
+        <h2>Case register ({sortedCases.length}{registerQuery.trim() ? ` of ${cases.length}` : ""})</h2>
+        <input type="text" value={registerQuery} onChange={(e) => setRegisterQuery(e.target.value)} placeholder="Search by patient name, case no., or history" style={{ width: "100%", maxWidth: 360, marginBottom: 12 }} />
         {cases.length === 0 ? <div className="empty">No case papers recorded yet.</div> : (
           <table>
             <thead><tr><CaseTh sortKeyName="caseNo">Case No.</CaseTh><CaseTh sortKeyName="date">Date</CaseTh><CaseTh sortKeyName="patientName">Patient</CaseTh><CaseTh sortKeyName="doctorName">Doctor</CaseTh><CaseTh sortKeyName="shift">Shift</CaseTh><CaseTh sortKeyName="briefHistory">History</CaseTh><CaseTh sortKeyName="medValue" className="num">Meds Value</CaseTh><th>Photo</th><th></th></tr></thead>
@@ -1788,12 +1898,13 @@ function exactAge(dobIso) {
 const GENDERS = ["Male", "Female", "Other"];
 
 /* ============================== PATIENT MASTER ============================== */
-function PatientMaster({ can, patients, addPatient, updatePatient, removePatient }) {
+function PatientMaster({ can, patients, addPatient, updatePatient, removePatient, pendingSearch, clearPendingSearch }) {
   const blank = { name: "", mobile: "", gender: "", dob: "", address: "" };
   const [form, setForm] = useState(blank);
   const [editingId, setEditingId] = useState(null);
   const [err, setErr] = useState(""); const [busy, setBusy] = useState(false);
   const [query, setQuery] = useState("");
+  useEffect(() => { if (pendingSearch) { setQuery(pendingSearch); clearPendingSearch(); } }, [pendingSearch, clearPendingSearch]);
 
   const startEdit = (p) => { setEditingId(p.id); setForm({ name: p.name, mobile: p.mobile, gender: p.gender, dob: p.dob, address: p.address }); setErr(""); };
   const cancelEdit = () => { setEditingId(null); setForm(blank); setErr(""); };
@@ -2082,12 +2193,14 @@ function PatientHistory({ can, updateCase, updateCollection, cases, doctors }) {
 }
 
 /* ============================== COLLECTIONS ============================== */
-function Collections({ collections, addCollection, updateCollection, removeCollection, cases, fy, can }) {
+function Collections({ collections, addCollection, updateCollection, removeCollection, cases, fy, pendingSearch, clearPendingSearch, can }) {
   const { call } = useApi();
   const blank = { caseId: "", caseNo: "", patientName: "", phone: "", date: todayISO(), amountDue: "", amountCollected: "", mode: "Cash", image: null };
   const [form, setForm] = useState(blank);
   const [err, setErr] = useState(""); const [busy, setBusy] = useState(false);
   const [rollups, setRollups] = useState({ daily: [], weekly: [], monthly: [] });
+  const [registerQuery, setRegisterQuery] = useState("");
+  useEffect(() => { if (pendingSearch) { setRegisterQuery(pendingSearch); clearPendingSearch(); } }, [pendingSearch, clearPendingSearch]);
   const range = fyRange(fy);
 
   useEffect(() => {
@@ -2131,6 +2244,9 @@ function Collections({ collections, addCollection, updateCollection, removeColle
     setBusy(false);
   };
   const remove = async (id) => { try { await removeCollection(id); if (editingId === id) cancelEdit(); } catch (e) { setErr(e.message); } };
+  const filteredCollections = registerQuery.trim()
+    ? collections.filter((c) => c.patientName.toLowerCase().includes(registerQuery.toLowerCase()) || (c.caseNo || "").toLowerCase().includes(registerQuery.toLowerCase()))
+    : collections;
 
   // ---- Cases with no Collections entry yet — find them and let staff book them, one at a time or all at once ----
   const linkedCaseIds = useMemo(() => new Set(collections.map((c) => c.caseId).filter(Boolean)), [collections]);
@@ -2230,11 +2346,12 @@ function Collections({ collections, addCollection, updateCollection, removeColle
       )}
 
       <div className="card">
-        <h2>Collection register</h2>
-        {collections.length === 0 ? <div className="empty">No collections recorded yet.</div> : (
+        <h2>Collection register ({filteredCollections.length}{registerQuery.trim() ? ` of ${collections.length}` : ""})</h2>
+        <input type="text" value={registerQuery} onChange={(e) => setRegisterQuery(e.target.value)} placeholder="Search by patient name or case no." style={{ width: "100%", maxWidth: 360, marginBottom: 12 }} />
+        {filteredCollections.length === 0 ? <div className="empty">No collections match.</div> : (
           <table>
             <thead><tr><th>Date</th><th>Case No.</th><th>Patient</th><th>Phone</th><th className="num">Due</th><th className="num">Collected</th><th className="num">Balance</th><th>Mode</th><th></th></tr></thead>
-            <tbody>{[...collections].sort((a, b) => (a.date < b.date ? 1 : -1)).map((c) => {
+            <tbody>{[...filteredCollections].sort((a, b) => (a.date < b.date ? 1 : -1)).map((c) => {
               const pending = !c.mode && Number(c.amountDue || 0) === 0 && Number(c.amountCollected || 0) === 0;
               return (
               <tr key={c.id} style={pending ? { background: "#FFF8E8" } : undefined}><td>{c.date}</td><td>{c.caseNo || "—"}</td><td>{c.patientName}</td><td>{c.phone}</td>
@@ -2245,7 +2362,7 @@ function Collections({ collections, addCollection, updateCollection, removeColle
           </table>
         )}
         <CustomExport
-          rows={collections} dateField="date" filenameBase="collections" printTitle="Collections" canExport={can("collections", "export")}
+          rows={filteredCollections} dateField="date" filenameBase="collections" printTitle="Collections" canExport={can("collections", "export")}
           buildSheets={(rows) => ({ Collections: rows, Daily: rollups.daily, Weekly: rollups.weekly, Monthly: rollups.monthly })}
           printColumns={[
             { label: "Date", value: (r) => r.date }, { label: "Case No.", value: (r) => r.caseNo }, { label: "Patient", value: (r) => r.patientName },
@@ -2488,10 +2605,12 @@ function Gifts({ gifts, addGift, updateGift, removeGift, doctors, can }) {
 }
 
 /* ============================== EXPENSES ============================== */
-function Expenses({ expenses, addExpense, updateExpense, removeExpense, fy, can }) {
+function Expenses({ expenses, addExpense, updateExpense, removeExpense, fy, pendingSearch, clearPendingSearch, can }) {
   const blank = { date: todayISO(), category: EXPENSE_CATEGORIES[0], amount: "", narration: "", image: null };
   const [form, setForm] = useState(blank); const [err, setErr] = useState(""); const [busy, setBusy] = useState(false);
   const [editingId, setEditingId] = useState(null);
+  const [registerQuery, setRegisterQuery] = useState("");
+  useEffect(() => { if (pendingSearch) { setRegisterQuery(pendingSearch); clearPendingSearch(); } }, [pendingSearch, clearPendingSearch]);
   const startEdit = (e) => { setEditingId(e.id); setForm({ date: e.date, category: e.category, amount: String(e.amount), narration: e.narration || "", image: e.image || null }); setErr(""); };
   const cancelEdit = () => { setEditingId(null); setForm(blank); setErr(""); };
   const save = async () => {
@@ -2506,6 +2625,9 @@ function Expenses({ expenses, addExpense, updateExpense, removeExpense, fy, can 
     setBusy(false);
   };
   const remove = async (id) => { try { await removeExpense(id); if (editingId === id) cancelEdit(); } catch (e) { setErr(e.message); } };
+  const filteredExpenses = registerQuery.trim()
+    ? expenses.filter((e) => (e.narration || "").toLowerCase().includes(registerQuery.toLowerCase()) || e.category.toLowerCase().includes(registerQuery.toLowerCase()))
+    : expenses;
   const range = fyRange(fy);
   const inFY = expenses.filter((e) => e.date >= range.start && e.date <= range.end);
   const byCat = {}; inFY.forEach((e) => { byCat[e.category] = (byCat[e.category] || 0) + e.amount; });
@@ -2532,14 +2654,15 @@ function Expenses({ expenses, addExpense, updateExpense, removeExpense, fy, can 
         <table><thead><tr><th>Category</th><th className="num">Amount</th></tr></thead><tbody>{EXPENSE_CATEGORIES.map((c) => (<tr key={c}><td>{c}</td><td className="num">{inr(byCat[c] || 0)}</td></tr>))}</tbody></table>
       </div>
       <div className="card">
-        <h2>All expense entries</h2>
-        {expenses.length === 0 ? <div className="empty">No expenses logged yet.</div> : (
+        <h2>All expense entries ({filteredExpenses.length}{registerQuery.trim() ? ` of ${expenses.length}` : ""})</h2>
+        <input type="text" value={registerQuery} onChange={(e) => setRegisterQuery(e.target.value)} placeholder="Search by narration or category" style={{ width: "100%", maxWidth: 360, marginBottom: 12 }} />
+        {filteredExpenses.length === 0 ? <div className="empty">{registerQuery.trim() ? "No expenses match that search." : "No expenses logged yet."}</div> : (
           <table><thead><tr><th>Date</th><th>Category</th><th>Narration</th><th className="num">Amount</th><th>Photo</th><th></th></tr></thead>
-            <tbody>{[...expenses].sort((a, b) => (a.date < b.date ? 1 : -1)).map((e) => (<tr key={e.id}><td>{e.date}</td><td>{e.category}</td><td>{e.narration}</td><td className="num">{inr(e.amount)}</td><td>{e.image ? "📎" : "—"}</td><td style={{ display: "flex", gap: 6 }}>{can("expenses", "edit") && <button className="btn secondary small" type="button" onClick={() => startEdit(e)}>Edit</button>}{can("expenses", "delete") && <button className="btn danger small" type="button" onClick={() => remove(e.id)}>Delete</button>}</td></tr>))}</tbody>
+            <tbody>{[...filteredExpenses].sort((a, b) => (a.date < b.date ? 1 : -1)).map((e) => (<tr key={e.id}><td>{e.date}</td><td>{e.category}</td><td>{e.narration}</td><td className="num">{inr(e.amount)}</td><td>{e.image ? "📎" : "—"}</td><td style={{ display: "flex", gap: 6 }}>{can("expenses", "edit") && <button className="btn secondary small" type="button" onClick={() => startEdit(e)}>Edit</button>}{can("expenses", "delete") && <button className="btn danger small" type="button" onClick={() => remove(e.id)}>Delete</button>}</td></tr>))}</tbody>
           </table>
         )}
         <CustomExport
-          rows={expenses} dateField="date" filenameBase="expenses" printTitle="Expenses" canExport={can("expenses", "export")}
+          rows={filteredExpenses} dateField="date" filenameBase="expenses" printTitle="Expenses" canExport={can("expenses", "export")}
           buildSheets={(rows) => ({ Expenses: rows, CategoryTotals: EXPENSE_CATEGORIES.map((c) => ({ Category: c, Amount: rows.filter((r) => r.category === c).reduce((s, r) => s + r.amount, 0) })) })}
           printColumns={[{ label: "Date", value: (e) => e.date }, { label: "Category", value: (e) => e.category }, { label: "Narration", value: (e) => e.narration }, { label: "Amount", value: (e) => inr(e.amount) }]}
         />
@@ -2791,7 +2914,7 @@ function AccessReport({ can }) {
 }
 
 /* ============================== SETTINGS ============================== */
-function SettingsPage({ settings, updateSettings, session, origin, capital, addCapital, removeCapital, loans, deposits, addOtherBalance, updateOtherBalance, removeOtherBalance, can }) {
+function SettingsPage({ settings, updateSettings, session, origin, capital, addCapital, removeCapital, loans, deposits, addOtherBalance, updateOtherBalance, removeOtherBalance, updateAvatar, can }) {
   const [form, setForm] = useState(settings);
   useEffect(() => setForm(settings), [settings]);
   const [err, setErr] = useState(""); const [busy, setBusy] = useState(false);
@@ -2805,6 +2928,11 @@ function SettingsPage({ settings, updateSettings, session, origin, capital, addC
 
   return (
     <div>
+      <div className="card">
+        <h2>My profile</h2>
+        <AvatarUploader currentUrl={session.avatarUrl} name={session.name} onUploaded={updateAvatar} />
+        <div className="note-box" style={{ marginTop: 12 }}>Your photo appears next to your name in the sidebar and in the top-right corner of every page.</div>
+      </div>
       <div className="card">
         <h2>Clinic profile</h2>
         <div className="form-grid">
@@ -2970,7 +3098,7 @@ function AdminUsers() {
                     {LEVELS.map((lv) => <option key={lv} value={lv}>{LEVEL_LABELS[lv]}</option>)}
                   </select>
                 </td>
-                <td><input type="checkbox" checked={!!d.permissions[m.key]?.export} onChange={(e) => setExport(u.id, m.key, e.target.checked)} /></td>
+                <td><label className="toggle-switch"><input type="checkbox" checked={!!d.permissions[m.key]?.export} onChange={(e) => setExport(u.id, m.key, e.target.checked)} /><span className="toggle-track"><span className="toggle-thumb" /></span></label></td>
               </tr>
             ))}
           </tbody>
