@@ -227,18 +227,18 @@ const mapDoctor = (r) => ({ id: r.id, name: r.name, shift: r.shift, payType: r.p
 const mapCase = (r) => ({
   id: r.id, caseNo: r.case_no, date: d10(r.case_date), patientName: r.patient_name, phone: r.phone,
   briefHistory: r.brief_history, doctorId: r.doctor_id, doctorName: r.doctor_name, shift: r.shift,
-  externalPrescription: r.external_prescription, image: r.image_url,
+  externalPrescription: r.external_prescription, image: r.image_url, createdAt: r.created_at,
   medicines: (r.medicines || []).map((m) => ({ name: m.medicine_name, qty: Number(m.qty), price: Number(m.unit_price) })),
 });
 const mapCollection = (r) => ({
   id: r.id, caseId: r.case_id, caseNo: r.case_no, patientName: r.patient_name, phone: r.phone,
   date: d10(r.collection_date), amountDue: Number(r.amount_due), amountCollected: Number(r.amount_collected),
-  balance: Number(r.balance), mode: r.mode, image: r.image_url,
+  balance: Number(r.balance), mode: r.mode, image: r.image_url, createdAt: r.created_at,
 });
 const mapDoctorPay = (r) => ({ id: r.id, date: d10(r.pay_date), doctorId: r.doctor_id, doctorName: r.doctor_name, amount: Number(r.amount) });
 const mapReferral = (r) => ({ id: r.id, date: d10(r.referral_date), patientName: r.patient_name, referralType: r.referral_type, referredTo: r.referred_to, amount: Number(r.amount), notes: r.notes });
 const mapGift = (r) => ({ id: r.id, date: d10(r.gift_date), repName: r.rep_name, company: r.company, gift: r.gift_description, doctorId: r.doctor_id, doctorName: r.doctor_name, amount: Number(r.amount) || 0 });
-const mapExpense = (r) => ({ id: r.id, date: d10(r.expense_date), category: r.category, amount: Number(r.amount), narration: r.narration, image: r.image_url });
+const mapExpense = (r) => ({ id: r.id, date: d10(r.expense_date), category: r.category, amount: Number(r.amount), narration: r.narration, image: r.image_url, createdAt: r.created_at });
 const mapAsset = (r) => ({ id: r.id, name: r.name, block: r.block, rate: Number(r.rate), purchaseDate: d10(r.purchase_date), cost: Number(r.cost) });
 const mapCapital = (r) => ({ id: r.id, date: d10(r.txn_date), type: r.txn_type, amount: Number(r.amount), note: r.note });
 const mapSettings = (r) => ({ clinicName: r.clinic_name || "Ganatra Clinic", proprietor: r.proprietor || "Dr. Bhavisha Pratik Ganatra", address: r.address || "", phone: r.phone || "" });
@@ -729,7 +729,7 @@ export default function App() {
   const addOtherBalance = useCallback(async (body) => { const r = await call("/other-balance", { method: "POST", body }); const item = mapOther(r); (item.category === "unsecured_loan" ? setLoans : setDeposits)((p) => [item, ...p]); }, [call]);
   const updateOtherBalance = useCallback(async (id, body) => { const r = await call(`/other-balance/${id}`, { method: "PUT", body }); const item = mapOther(r); (item.category === "unsecured_loan" ? setLoans : setDeposits)((p) => p.map((x) => (x.id === id ? item : x))); }, [call]);
   const removeOtherBalance = useCallback(async (id, category) => { await call(`/other-balance/${id}`, { method: "DELETE" }); (category === "unsecured_loan" ? setLoans : setDeposits)((p) => p.filter((x) => x.id !== id)); }, [call]);
-  const mapPatientMaster = (r) => ({ id: r.id, name: r.name, mobile: r.mobile || "", gender: r.gender || "", dob: d10(r.dob), address: r.address || "" });
+  const mapPatientMaster = (r) => ({ id: r.id, name: r.name, mobile: r.mobile || "", gender: r.gender || "", dob: d10(r.dob), address: r.address || "", createdAt: r.created_at });
   const addPatientMaster = useCallback(async (body) => { const r = await call("/patient-master", { method: "POST", body }); setPatientsMaster((p) => [mapPatientMaster(r), ...p]); }, [call]);
   const updatePatientMaster = useCallback(async (id, body) => { const r = await call(`/patient-master/${id}`, { method: "PUT", body }); setPatientsMaster((p) => p.map((x) => (x.id === id ? mapPatientMaster(r) : x))); }, [call]);
   const removePatientMaster = useCallback(async (id) => { await call(`/patient-master/${id}`, { method: "DELETE" }); setPatientsMaster((p) => p.filter((x) => x.id !== id)); }, [call]);
@@ -779,6 +779,27 @@ export default function App() {
           .quick-action-row{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:30px;}
           .quick-action-btn{background:#fff;border:1.5px solid var(--primary);color:var(--primary);font-weight:700;font-size:13px;padding:10px 18px;border-radius:10px;cursor:pointer;transition:background .12s ease,color .12s ease;}
           .quick-action-btn:hover{background:var(--primary);color:#fff;}
+          .launcher-search{position:relative;margin-bottom:18px;max-width:520px;}
+          .launcher-search input{width:100%;padding:12px 16px;border-radius:12px;border:1.5px solid #EAE6F5;font-size:14px;background:#fff;box-shadow:0 1px 4px rgba(80,60,120,.06);}
+          .launcher-search-results{position:absolute;top:calc(100% + 6px);left:0;right:0;background:#fff;border:1px solid #EAE6F5;border-radius:12px;box-shadow:0 10px 28px rgba(80,60,120,.18);max-height:360px;overflow-y:auto;z-index:20;padding:8px 0;}
+          .launcher-search-empty{padding:14px 18px;font-size:13px;color:var(--ink-soft);}
+          .search-group-label{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-soft);padding:8px 16px 4px;}
+          .search-item{padding:8px 16px;font-size:13.5px;cursor:pointer;}
+          .search-item:hover{background:#F6F3FC;}
+          .role-panel{background:#fff;border:1px solid #EAE6F5;border-radius:14px;padding:16px 18px;margin-bottom:26px;box-shadow:0 1px 4px rgba(80,60,120,.06);}
+          .role-panel-label{font-size:11.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:12px;}
+          .role-panel-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;}
+          .role-stat{cursor:pointer;padding:8px 4px;border-radius:8px;transition:background .12s ease;}
+          .role-stat:hover{background:#F6F3FC;}
+          .role-stat-value{display:block;font-size:20px;font-weight:800;color:var(--primary-dark);}
+          .role-stat-label{display:block;font-size:11.5px;color:var(--ink-soft);margin-top:2px;}
+          .activity-feed{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;}
+          .activity-col{background:#fff;border:1px solid #EAE6F5;border-radius:12px;padding:14px 16px;}
+          .activity-col-title{font-size:12px;font-weight:700;color:var(--ink);margin-bottom:8px;}
+          .activity-row{display:flex;justify-content:space-between;gap:8px;font-size:12.5px;padding:6px 0;border-top:1px solid #F3F0FA;cursor:pointer;}
+          .activity-row:first-of-type{border-top:none;}
+          .activity-row:hover{color:var(--primary);}
+          .activity-when{color:var(--ink-soft);flex-shrink:0;}
           @media(max-width:640px){ .launcher-grid{grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:12px;} .launcher-wrap{padding:22px 14px;} }
           .period-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-bottom:18px;}
           .week-picker{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:-4px 0 10px;}
@@ -1134,6 +1155,7 @@ function ShiftCollectionChart({ collections, cases, fy }) {
  *  app — no new API calls, no new attack surface, and every tile still
  *  respects the exact same view-permission filter used everywhere else. */
 function LauncherGrid({ settings, session, can, setView, cases, collections, expenses, doctorPays, referrals, gifts, doctors, patientsMaster }) {
+  const { call } = useApi();
   const tiles = NAV.filter((n) => !n.adminOnly || session.role === "Admin").filter((n) => !n.module || can(n.module, "view"));
   const overview = tiles.filter((n) => n.group === "overview");
   const grouped = ["clinical", "finance", "operations", "admin"].map((g) => ({ group: g, items: tiles.filter((n) => n.group === g) })).filter((g) => g.items.length > 0);
@@ -1176,6 +1198,42 @@ function LauncherGrid({ settings, session, can, setView, cases, collections, exp
     );
   };
 
+  // ---- 1. Universal search — patients, cases, collections, expenses, all from one box ----
+  const [query, setQuery] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searchResults = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (q.length < 2) return null;
+    const canSee = (m) => can(m, "view");
+    return {
+      patients: canSee("cases") ? patientsMaster.filter((p) => p.name.toLowerCase().includes(q) || p.mobile.includes(q)).slice(0, 5) : [],
+      cases: canSee("cases") ? cases.filter((c) => c.patientName.toLowerCase().includes(q) || c.caseNo.toLowerCase().includes(q) || (c.briefHistory || "").toLowerCase().includes(q)).slice(0, 5) : [],
+      collections: canSee("collections") ? collections.filter((c) => c.patientName.toLowerCase().includes(q) || (c.caseNo || "").toLowerCase().includes(q)).slice(0, 5) : [],
+      expenses: canSee("expenses") ? expenses.filter((e) => (e.narration || "").toLowerCase().includes(q) || e.category.toLowerCase().includes(q)).slice(0, 5) : [],
+    };
+  }, [query, cases, collections, expenses, patientsMaster, can]);
+  const totalResults = searchResults ? Object.values(searchResults).reduce((s, arr) => s + arr.length, 0) : 0;
+
+  // ---- 2. Recent activity — genuinely ordered by real database insertion time, not a date guess ----
+  const byCreatedDesc = (arr) => [...arr].filter((x) => x.createdAt).sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)).slice(0, 5);
+  const recentPatients = can("cases", "view") ? byCreatedDesc(patientsMaster) : [];
+  const recentCollections = can("collections", "view") ? byCreatedDesc(collections) : [];
+  const recentExpenses = can("expenses", "view") ? byCreatedDesc(expenses) : [];
+  const hasRecentActivity = recentPatients.length + recentCollections.length + recentExpenses.length > 0;
+
+  // ---- 3. Role-based personalization ----
+  const [pendingApprovals, setPendingApprovals] = useState(null);
+  useEffect(() => {
+    if (session.role !== "Admin") return;
+    call("/admin/users").then((users) => setPendingApprovals((users || []).filter((u) => u.status === "pending_approval").length)).catch(() => setPendingApprovals(null));
+  }, [session.role, call]);
+
+  const pendingCaseBookings = cases.filter((c) => !collections.some((col) => col.caseId === c.id && (col.mode || Number(col.amountDue) > 0))).length;
+  const todayCasesCount = cases.filter((c) => c.date === t).length;
+  const todayCollectedTotal = collections.filter((c) => c.date === t).reduce((s, c) => s + Number(c.amountCollected || 0), 0);
+  const weekExpenseTotal = expenses.filter((e) => e.date >= weekStart && e.date <= t).reduce((s, e) => s + Number(e.amount || 0), 0);
+  const weekCollectedTotal = collections.filter((c) => c.date >= weekStart && c.date <= t).reduce((s, c) => s + Number(c.amountCollected || 0), 0);
+
   return (
     <div className="launcher-wrap">
       <div className="launcher-header">
@@ -1183,9 +1241,65 @@ function LauncherGrid({ settings, session, can, setView, cases, collections, exp
         <p>Welcome back, {session.name.split(" ")[0]} — pick where you want to go.</p>
       </div>
 
+      <div className="launcher-search no-print">
+        <input
+          type="text" value={query} placeholder="🔍 Search patients, cases, collections, expenses…"
+          onChange={(e) => { setQuery(e.target.value); setSearchOpen(true); }} onFocus={() => setSearchOpen(true)}
+        />
+        {searchOpen && searchResults && (
+          <div className="launcher-search-results">
+            {totalResults === 0 ? <div className="launcher-search-empty">No matches for "{query}".</div> : (
+              <>
+                {searchResults.patients.length > 0 && (
+                  <div className="search-group"><div className="search-group-label">🧑‍🤝‍🧑 Patients</div>
+                    {searchResults.patients.map((p) => <div key={p.id} className="search-item" onClick={() => { setView("patientMaster"); setSearchOpen(false); }}>{p.name}{p.mobile ? ` — ${p.mobile}` : ""}</div>)}
+                  </div>
+                )}
+                {searchResults.cases.length > 0 && (
+                  <div className="search-group"><div className="search-group-label">📋 Case Records</div>
+                    {searchResults.cases.map((c) => <div key={c.id} className="search-item" onClick={() => { setView("cases"); setSearchOpen(false); }}>{c.caseNo} — {c.patientName}</div>)}
+                  </div>
+                )}
+                {searchResults.collections.length > 0 && (
+                  <div className="search-group"><div className="search-group-label">💰 Collections</div>
+                    {searchResults.collections.map((c) => <div key={c.id} className="search-item" onClick={() => { setView("collections"); setSearchOpen(false); }}>{c.patientName} — {inr(c.amountCollected)} ({c.date})</div>)}
+                  </div>
+                )}
+                {searchResults.expenses.length > 0 && (
+                  <div className="search-group"><div className="search-group-label">🧾 Expenses</div>
+                    {searchResults.expenses.map((e) => <div key={e.id} className="search-item" onClick={() => { setView("expenses"); setSearchOpen(false); }}>{e.category} — {inr(e.amount)} ({e.date})</div>)}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+      </div>
+
       {quickActions.length > 0 && (
         <div className="quick-action-row no-print">
           {quickActions.map((a) => <button key={a.view} className="quick-action-btn" onClick={() => setView(a.view)}>{a.label}</button>)}
+        </div>
+      )}
+
+      {session.role === "Doctor" && (
+        <div className="role-panel no-print">
+          <div className="role-panel-label">Today, at a glance</div>
+          <div className="role-panel-stats">
+            <div className="role-stat" onClick={() => setView("cases")}><span className="role-stat-value">{todayCasesCount}</span><span className="role-stat-label">Case records today</span></div>
+            <div className="role-stat" onClick={() => setView("collections")}><span className="role-stat-value">{inr(todayCollectedTotal)}</span><span className="role-stat-label">Collected today</span></div>
+            <div className="role-stat" onClick={() => setView("collections")}><span className="role-stat-value">{pendingCaseBookings}</span><span className="role-stat-label">Case records pending billing</span></div>
+          </div>
+        </div>
+      )}
+      {session.role === "Admin" && (
+        <div className="role-panel no-print">
+          <div className="role-panel-label">Admin overview</div>
+          <div className="role-panel-stats">
+            <div className="role-stat" onClick={() => setView("admin")}><span className="role-stat-value">{pendingApprovals === null ? "…" : pendingApprovals}</span><span className="role-stat-label">Pending approvals</span></div>
+            <div className="role-stat" onClick={() => setView("expenses")}><span className="role-stat-value">{inr(weekExpenseTotal)}</span><span className="role-stat-label">Expenses this week</span></div>
+            <div className="role-stat" onClick={() => setView("dashboard")}><span className="role-stat-value">{inr(weekCollectedTotal - weekExpenseTotal)}</span><span className="role-stat-label">Net this week</span></div>
+          </div>
         </div>
       )}
 
@@ -1203,6 +1317,32 @@ function LauncherGrid({ settings, session, can, setView, cases, collections, exp
           </div>
         </div>
       ))}
+
+      {hasRecentActivity && (
+        <div className="launcher-section">
+          <div className="launcher-section-label" style={{ color: "#5B6B78" }}>Recent Activity</div>
+          <div className="activity-feed">
+            {recentPatients.length > 0 && (
+              <div className="activity-col">
+                <div className="activity-col-title">🧑‍🤝‍🧑 Last patients added</div>
+                {recentPatients.map((p) => (<div key={p.id} className="activity-row" onClick={() => setView("patientMaster")}><span>{p.name}</span><span className="activity-when">{p.mobile || "—"}</span></div>))}
+              </div>
+            )}
+            {recentCollections.length > 0 && (
+              <div className="activity-col">
+                <div className="activity-col-title">💰 Last collections</div>
+                {recentCollections.map((c) => (<div key={c.id} className="activity-row" onClick={() => setView("collections")}><span>{c.patientName}</span><span className="activity-when">{inr(c.amountCollected)}</span></div>))}
+              </div>
+            )}
+            {recentExpenses.length > 0 && (
+              <div className="activity-col">
+                <div className="activity-col-title">🧾 Last expenses</div>
+                {recentExpenses.map((e) => (<div key={e.id} className="activity-row" onClick={() => setView("expenses")}><span>{e.category}</span><span className="activity-when">{inr(e.amount)}</span></div>))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
