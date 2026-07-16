@@ -166,6 +166,30 @@ function ExportRow({ onExcel }) {
 }
 function ErrorNote({ msg }) { return msg ? <div className="err-note">{msg}</div> : null; }
 
+/** An Outlook-style slide-out panel — appears from the right when opened,
+ *  closes on the X button, the backdrop, or Escape. Reused for every
+ *  Add/Edit form in the app instead of stacking each form above its list. */
+function SlideOverPanel({ open, onClose, title, children }) {
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+  if (!open) return null;
+  return (
+    <div className="slideover-backdrop no-print" onClick={onClose}>
+      <div className="slideover-panel" onClick={(e) => e.stopPropagation()}>
+        <div className="slideover-header">
+          <h2>{title}</h2>
+          <button className="slideover-close" type="button" onClick={onClose} aria-label="Close">✕</button>
+        </div>
+        <div className="slideover-body">{children}</div>
+      </div>
+    </div>
+  );
+}
+
 /** Date-range export control: pick From/To, then Export Excel/PDF filters
  *  `rows` by `dateField` before handing off. Used on every module page. */
 function CustomExport({ rows, dateField, buildSheets, filenameBase, printTitle, printColumns, canExport = true }) {
@@ -964,6 +988,16 @@ export default function App() {
           .imgcap-controls{display:flex;gap:6px;flex-wrap:wrap;} .imgcap-input{display:none;} .imgcap-label{cursor:pointer;display:inline-block;}
           .note-box{font-size:12px;color:var(--ink-soft);line-height:1.6;background:#F5F8F7;border-left:3px solid var(--accent);padding:10px 12px;border-radius:6px;margin-top:10px;}
           .err-note{font-size:12px;color:var(--expense);background:#f6e4e4;padding:8px 10px;border-radius:6px;margin-top:8px;}
+          .slideover-backdrop{position:fixed;inset:0;background:rgba(20,10,30,.4);z-index:100;display:flex;justify-content:flex-end;animation:sofade .15s ease;}
+          .slideover-panel{width:min(520px,94vw);height:100%;background:#fff;box-shadow:-10px 0 34px rgba(20,10,30,.28);overflow-y:auto;animation:soslide .24s cubic-bezier(.16,1,.3,1);display:flex;flex-direction:column;}
+          .slideover-header{display:flex;justify-content:space-between;align-items:center;padding:18px 24px;border-bottom:1px solid var(--border);position:sticky;top:0;background:#fff;z-index:1;}
+          .slideover-header h2{margin:0;font-size:17px;}
+          .slideover-close{background:none;border:none;font-size:17px;cursor:pointer;color:var(--ink-soft);padding:5px 10px;border-radius:8px;line-height:1;}
+          .slideover-close:hover{background:#F3F0FA;color:var(--ink);}
+          .slideover-body{padding:22px 24px;flex:1;}
+          @keyframes soslide{from{transform:translateX(100%);}to{transform:translateX(0);}}
+          @keyframes sofade{from{opacity:0;}to{opacity:1;}}
+          .register-toolbar{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px;}
           .info{font-size:12px;color:var(--income);background:#e3efe6;padding:8px 10px;border-radius:6px;margin-top:8px;}
           @media (max-width:820px){
             .app-root{flex-direction:column;} .sidebar{width:100%;flex-direction:row;flex-wrap:wrap;padding:14px 12px;align-items:center;}
@@ -1672,13 +1706,16 @@ function CaseRecords({ cases, addCase, updateCase, removeCase, doctors, patients
   const rmMed = (i) => setMeds(meds.filter((_, idx) => idx !== i));
 
   const [editingId, setEditingId] = useState(null);
+  const [panelOpen, setPanelOpen] = useState(false);
+  const openAdd = () => { setEditingId(null); setForm(blank); setMeds([{ name: "", qty: "", price: "" }]); setErr(""); setPanelOpen(true); };
   const startEdit = (c) => {
     setEditingId(c.id);
     setForm({ date: c.date, patientName: c.patientName, phone: c.phone || "", briefHistory: c.briefHistory || "", doctorId: c.doctorId || "", shift: c.shift || "Morning", externalPrescription: c.externalPrescription || "", image: c.image || null });
     setMeds(c.medicines && c.medicines.length ? c.medicines.map((m) => ({ name: m.name, qty: String(m.qty), price: String(m.price) })) : [{ name: "", qty: "", price: "" }]);
     setErr("");
+    setPanelOpen(true);
   };
-  const cancelEdit = () => { setEditingId(null); setForm(blank); setMeds([{ name: "", qty: "", price: "" }]); setErr(""); };
+  const cancelEdit = () => { setEditingId(null); setForm(blank); setMeds([{ name: "", qty: "", price: "" }]); setErr(""); setPanelOpen(false); };
   const save = async () => {
     setErr("");
     if (!form.patientName.trim()) { setErr("Enter the patient's name."); return; }
@@ -1688,7 +1725,7 @@ function CaseRecords({ cases, addCase, updateCase, removeCase, doctors, patients
     try {
       if (editingId) { await updateCase(editingId, payload); setEditingId(null); }
       else { await addCase(payload); }
-      setForm(blank); setMeds([{ name: "", qty: "", price: "" }]);
+      setForm(blank); setMeds([{ name: "", qty: "", price: "" }]); setPanelOpen(false);
     } catch (e) { setErr(e.message); }
     setBusy(false);
   };
@@ -1805,8 +1842,7 @@ function CaseRecords({ cases, addCase, updateCase, removeCase, doctors, patients
           </div>
         </div>
       )}
-      <div className="card">
-        <h2>{editingId ? "Edit case paper entry" : "New case paper entry"}</h2>
+      <SlideOverPanel open={panelOpen} onClose={cancelEdit} title={editingId ? "Edit case paper entry" : "New case paper entry"}>
         <div className="form-grid">
           <div><label>Date</label><input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /></div>
           <div style={{ position: "relative" }}>
@@ -1853,9 +1889,12 @@ function CaseRecords({ cases, addCase, updateCase, removeCase, doctors, patients
         </div>
         <ErrorNote msg={err} />
         <div className="note-box">Loose-medicine values are for clinical/inventory reference only — not posted as a separate expense, since "Medicine Bills" already covers what the clinic pays its supplier.</div>
-      </div>
+      </SlideOverPanel>
       <div className="card">
-        <h2>Case register ({sortedCases.length}{registerQuery.trim() ? ` of ${cases.length}` : ""})</h2>
+        <div className="register-toolbar">
+          <h2 style={{ margin: 0 }}>Case register ({sortedCases.length}{registerQuery.trim() ? ` of ${cases.length}` : ""})</h2>
+          {can("cases", "write") && <button className="btn" type="button" onClick={openAdd}>+ Add case record</button>}
+        </div>
         <input type="text" value={registerQuery} onChange={(e) => setRegisterQuery(e.target.value)} placeholder="Search by patient name, case no., or history" style={{ width: "100%", maxWidth: 360, marginBottom: 12 }} />
         {cases.length === 0 ? <div className="empty">No case papers recorded yet.</div> : (
           <table>
@@ -1906,15 +1945,17 @@ function PatientMaster({ can, patients, addPatient, updatePatient, removePatient
   const [query, setQuery] = useState("");
   useEffect(() => { if (pendingSearch) { setQuery(pendingSearch); clearPendingSearch(); } }, [pendingSearch, clearPendingSearch]);
 
-  const startEdit = (p) => { setEditingId(p.id); setForm({ name: p.name, mobile: p.mobile, gender: p.gender, dob: p.dob, address: p.address }); setErr(""); };
-  const cancelEdit = () => { setEditingId(null); setForm(blank); setErr(""); };
+  const [panelOpen, setPanelOpen] = useState(false);
+  const openAdd = () => { setEditingId(null); setForm(blank); setErr(""); setPanelOpen(true); };
+  const startEdit = (p) => { setEditingId(p.id); setForm({ name: p.name, mobile: p.mobile, gender: p.gender, dob: p.dob, address: p.address }); setErr(""); setPanelOpen(true); };
+  const cancelEdit = () => { setEditingId(null); setForm(blank); setErr(""); setPanelOpen(false); };
   const save = async () => {
     setErr(""); if (!form.name.trim()) { setErr("Enter the patient's name."); return; }
     setBusy(true);
     try {
       if (editingId) { await updatePatient(editingId, form); setEditingId(null); }
       else { await addPatient(form); }
-      setForm(blank);
+      setForm(blank); setPanelOpen(false);
     } catch (e) { setErr(e.message); }
     setBusy(false);
   };
@@ -1946,8 +1987,7 @@ function PatientMaster({ can, patients, addPatient, updatePatient, removePatient
 
   return (
     <div>
-      <div className="card">
-        <h2>{editingId ? "Edit patient" : "Add patient"}</h2>
+      <SlideOverPanel open={panelOpen} onClose={cancelEdit} title={editingId ? "Edit patient" : "Add patient"}>
         <div className="form-grid">
           <div><label>Patient name</label><input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
           <div><label>Mobile number</label><input type="tel" value={form.mobile} onChange={(e) => setForm({ ...form, mobile: e.target.value })} /></div>
@@ -1961,10 +2001,13 @@ function PatientMaster({ can, patients, addPatient, updatePatient, removePatient
           {editingId && <button className="btn secondary" type="button" onClick={cancelEdit}>Cancel edit</button>}
         </div>
         <ErrorNote msg={err} />
-      </div>
+      </SlideOverPanel>
 
       <div className="card">
-        <h2>Patient register ({filtered.length})</h2>
+        <div className="register-toolbar">
+          <h2 style={{ margin: 0 }}>Patient register ({filtered.length})</h2>
+          {can("cases", "write") && <button className="btn" type="button" onClick={openAdd}>+ Add patient</button>}
+        </div>
         <input type="text" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search by name or mobile number" style={{ width: "100%", maxWidth: 360, marginBottom: 12 }} />
         {sorted.length === 0 ? <div className="empty">No patients found.</div> : (
           <table>
@@ -2214,6 +2257,7 @@ function Collections({ collections, addCollection, updateCollection, removeColle
   }, [call, fy]); // eslint-disable-line
 
   const [editingId, setEditingId] = useState(null);
+  const [panelOpen, setPanelOpen] = useState(false);
   const [caseQuery, setCaseQuery] = useState("");
   const [caseSuggestOpen, setCaseSuggestOpen] = useState(false);
   const caseSuggestions = caseQuery.trim()
@@ -2225,13 +2269,15 @@ function Collections({ collections, addCollection, updateCollection, removeColle
     setCaseSuggestOpen(false);
   };
   const clearCase = () => { setForm({ ...form, caseId: "", caseNo: "" }); setCaseQuery(""); };
+  const openAdd = () => { setEditingId(null); setForm(blank); setCaseQuery(""); setErr(""); setPanelOpen(true); };
   const startEdit = (c) => {
     setEditingId(c.id);
     setForm({ caseId: c.caseId || "", caseNo: c.caseNo || "", patientName: c.patientName, phone: c.phone || "", date: c.date, amountDue: String(c.amountDue), amountCollected: String(c.amountCollected), mode: c.mode || "Cash", image: c.image || null });
     setCaseQuery(c.caseNo ? `${c.caseNo} — ${c.patientName}` : "");
     setErr("");
+    setPanelOpen(true);
   };
-  const cancelEdit = () => { setEditingId(null); setForm(blank); setCaseQuery(""); setErr(""); };
+  const cancelEdit = () => { setEditingId(null); setForm(blank); setCaseQuery(""); setErr(""); setPanelOpen(false); };
   const save = async () => {
     setErr(""); if (!form.patientName.trim() || form.amountDue === "") { setErr("Enter patient name and amount due."); return; }
     setBusy(true);
@@ -2239,7 +2285,7 @@ function Collections({ collections, addCollection, updateCollection, removeColle
     try {
       if (editingId) { await updateCollection(editingId, payload); setEditingId(null); }
       else { await addCollection(payload); }
-      setForm(blank); setCaseQuery("");
+      setForm(blank); setCaseQuery(""); setPanelOpen(false);
     } catch (e) { setErr(e.message); }
     setBusy(false);
   };
@@ -2282,8 +2328,7 @@ function Collections({ collections, addCollection, updateCollection, removeColle
 
   return (
     <div>
-      <div className="card">
-        <h2>{editingId ? "Edit collection entry" : "New collection entry"}</h2>
+      <SlideOverPanel open={panelOpen} onClose={cancelEdit} title={editingId ? "Edit collection entry" : "New collection entry"}>
         <div className="form-grid">
           <div style={{ position: "relative" }}>
             <label>Linked case no.</label>
@@ -2315,7 +2360,7 @@ function Collections({ collections, addCollection, updateCollection, removeColle
           {editingId && <button className="btn secondary" type="button" onClick={cancelEdit}>Cancel edit</button>}
         </div>
         <ErrorNote msg={err} />
-      </div>
+      </SlideOverPanel>
 
       {can("collections", "write") && orphanCases.length > 0 && (
         <div className="card" style={{ borderColor: "var(--accent)" }}>
@@ -2346,7 +2391,10 @@ function Collections({ collections, addCollection, updateCollection, removeColle
       )}
 
       <div className="card">
-        <h2>Collection register ({filteredCollections.length}{registerQuery.trim() ? ` of ${collections.length}` : ""})</h2>
+        <div className="register-toolbar">
+          <h2 style={{ margin: 0 }}>Collection register ({filteredCollections.length}{registerQuery.trim() ? ` of ${collections.length}` : ""})</h2>
+          {can("collections", "write") && <button className="btn" type="button" onClick={openAdd}>+ Add collection entry</button>}
+        </div>
         <input type="text" value={registerQuery} onChange={(e) => setRegisterQuery(e.target.value)} placeholder="Search by patient name or case no." style={{ width: "100%", maxWidth: 360, marginBottom: 12 }} />
         {filteredCollections.length === 0 ? <div className="empty">No collections match.</div> : (
           <table>
@@ -2413,28 +2461,32 @@ function DoctorShifts({ doctors, addDoctor, updateDoctor, removeDoctor, doctorPa
 
   const [editingDocId, setEditingDocId] = useState(null);
   const [editingPayId, setEditingPayId] = useState(null);
-  const startEditDoc = (x) => { setEditingDocId(x.id); setD({ name: x.name, shift: x.shift, payType: x.payType, rate: String(x.rate) }); setErr(""); };
-  const cancelEditDoc = () => { setEditingDocId(null); setD({ name: "", shift: "Morning", payType: "Daily", rate: "" }); setErr(""); };
+  const [docPanelOpen, setDocPanelOpen] = useState(false);
+  const [payPanelOpen, setPayPanelOpen] = useState(false);
+  const openAddDoc = () => { setEditingDocId(null); setD({ name: "", shift: "Morning", payType: "Daily", rate: "" }); setErr(""); setDocPanelOpen(true); };
+  const startEditDoc = (x) => { setEditingDocId(x.id); setD({ name: x.name, shift: x.shift, payType: x.payType, rate: String(x.rate) }); setErr(""); setDocPanelOpen(true); };
+  const cancelEditDoc = () => { setEditingDocId(null); setD({ name: "", shift: "Morning", payType: "Daily", rate: "" }); setErr(""); setDocPanelOpen(false); };
   const addDoc = async () => {
     setErr(""); if (!d.name.trim()) return; setBusy(true);
     const payload = { name: d.name, shift: d.shift, payType: d.payType, rate: Number(d.rate) || 0 };
     try {
       if (editingDocId) { await updateDoctor(editingDocId, payload); setEditingDocId(null); }
       else { await addDoctor(payload); }
-      setD({ name: "", shift: "Morning", payType: "Daily", rate: "" });
+      setD({ name: "", shift: "Morning", payType: "Daily", rate: "" }); setDocPanelOpen(false);
     } catch (e) { setErr(e.message); }
     setBusy(false);
   };
   const delDoc = async (id) => { try { await removeDoctor(id); if (editingDocId === id) cancelEditDoc(); } catch (e) { setErr(e.message); } };
-  const startEditPay = (x) => { setEditingPayId(x.id); setP({ date: x.date, doctorId: x.doctorId, amount: String(x.amount) }); setErr(""); };
-  const cancelEditPay = () => { setEditingPayId(null); setP({ date: todayISO(), doctorId: "", amount: "" }); setErr(""); };
+  const openAddPay = () => { setEditingPayId(null); setP({ date: todayISO(), doctorId: "", amount: "" }); setErr(""); setPayPanelOpen(true); };
+  const startEditPay = (x) => { setEditingPayId(x.id); setP({ date: x.date, doctorId: x.doctorId, amount: String(x.amount) }); setErr(""); setPayPanelOpen(true); };
+  const cancelEditPay = () => { setEditingPayId(null); setP({ date: todayISO(), doctorId: "", amount: "" }); setErr(""); setPayPanelOpen(false); };
   const addPay = async () => {
     setErr(""); if (!p.doctorId || !p.amount) return; setBusy(true);
     const payload = { doctorId: p.doctorId, date: p.date, amount: Number(p.amount) };
     try {
       if (editingPayId) { await updateDoctorPay(editingPayId, payload); setEditingPayId(null); }
       else { await addDoctorPay(payload); }
-      setP({ date: todayISO(), doctorId: "", amount: "" });
+      setP({ date: todayISO(), doctorId: "", amount: "" }); setPayPanelOpen(false);
     } catch (e) { setErr(e.message); }
     setBusy(false);
   };
@@ -2442,8 +2494,7 @@ function DoctorShifts({ doctors, addDoctor, updateDoctor, removeDoctor, doctorPa
 
   return (
     <div>
-      <div className="card">
-        <h2>Doctors on roster</h2>
+      <SlideOverPanel open={docPanelOpen} onClose={cancelEditDoc} title={editingDocId ? "Edit doctor" : "Add doctor"}>
         <div className="form-grid">
           <div><label>Name</label><input type="text" value={d.name} onChange={(e) => setD({ ...d, name: e.target.value })} placeholder="Dr. …" /></div>
           <div><label>Shift</label><select value={d.shift} onChange={(e) => setD({ ...d, shift: e.target.value })}>{SHIFTS.map((s) => <option key={s} value={s}>{s}</option>)}</select></div>
@@ -2454,13 +2505,18 @@ function DoctorShifts({ doctors, addDoctor, updateDoctor, removeDoctor, doctorPa
           {(editingDocId ? can("doctorPay", "edit") : can("doctorPay", "write")) && <button className="btn" type="button" disabled={busy} onClick={addDoc}>{editingDocId ? "Update doctor" : "Add doctor"}</button>}
           {editingDocId && <button className="btn secondary" type="button" onClick={cancelEditDoc}>Cancel edit</button>}
         </div>
+        <ErrorNote msg={err} />
+      </SlideOverPanel>
+      <div className="card">
+        <div className="register-toolbar">
+          <h2 style={{ margin: 0 }}>Doctors on roster</h2>
+          {can("doctorPay", "write") && <button className="btn" type="button" onClick={openAddDoc}>+ Add doctor</button>}
+        </div>
         <table style={{ marginTop: 14 }}><thead><tr><th>Name</th><th>Shift</th><th>Pay type</th><th className="num">Rate</th><th></th></tr></thead>
           <tbody>{doctors.map((x) => (<tr key={x.id}><td>{x.name}</td><td><span className={"pill " + x.shift.toLowerCase()}>{x.shift}</span></td><td>{x.payType}</td><td className="num">{inr(x.rate)}</td><td style={{ display: "flex", gap: 6 }}>{can("doctorPay", "edit") && <button className="btn secondary small" type="button" onClick={() => startEditDoc(x)}>Edit</button>}{can("doctorPay", "delete") && <button className="btn danger small" type="button" onClick={() => delDoc(x.id)}>Delete</button>}</td></tr>))}</tbody>
         </table>
-        <ErrorNote msg={err} />
       </div>
-      <div className="card">
-        <h2>Log a pay entry</h2>
+      <SlideOverPanel open={payPanelOpen} onClose={cancelEditPay} title={editingPayId ? "Edit pay entry" : "Log a pay entry"}>
         <div className="form-grid">
           <div><label>Date</label><input type="date" value={p.date} onChange={(e) => setP({ ...p, date: e.target.value })} /></div>
           <div><label>Doctor</label><select value={p.doctorId} onChange={(e) => { const doc = doctors.find((x) => x.id === e.target.value); setP({ ...p, doctorId: e.target.value, amount: doc ? doc.rate : p.amount }); }}><option value="">Select doctor</option>{doctors.map((x) => <option key={x.id} value={x.id}>{x.name} ({x.shift})</option>)}</select></div>
@@ -2469,6 +2525,13 @@ function DoctorShifts({ doctors, addDoctor, updateDoctor, removeDoctor, doctorPa
         <div style={{ display: "flex", gap: 8 }}>
           {(editingPayId ? can("doctorPay", "edit") : can("doctorPay", "write")) && <button className="btn" type="button" disabled={busy} onClick={addPay}>{editingPayId ? "Update pay entry" : "Log pay entry"}</button>}
           {editingPayId && <button className="btn secondary" type="button" onClick={cancelEditPay}>Cancel edit</button>}
+        </div>
+        <ErrorNote msg={err} />
+      </SlideOverPanel>
+      <div className="card">
+        <div className="register-toolbar">
+          <h2 style={{ margin: 0 }}>Pay entries</h2>
+          {can("doctorPay", "write") && <button className="btn" type="button" onClick={openAddPay}>+ Log pay entry</button>}
         </div>
         <table style={{ marginTop: 14 }}><thead><tr><th>Date</th><th>Doctor</th><th className="num">Amount</th><th></th></tr></thead>
           <tbody>{[...doctorPays].sort((a, b) => (a.date < b.date ? 1 : -1)).map((x) => (<tr key={x.id}><td>{x.date}</td><td>{x.doctorName}</td><td className="num">{inr(x.amount)}</td><td style={{ display: "flex", gap: 6 }}>{can("doctorPay", "edit") && <button className="btn secondary small" type="button" onClick={() => startEditPay(x)}>Edit</button>}{can("doctorPay", "delete") && <button className="btn danger small" type="button" onClick={() => delPay(x.id)}>Delete</button>}</td></tr>))}</tbody>
@@ -2498,8 +2561,10 @@ function Referrals({ referrals, addReferral, updateReferral, removeReferral, fy,
   const blank = { date: todayISO(), patientName: "", referralType: "Lab Test", referredTo: "", amount: "", notes: "" };
   const [form, setForm] = useState(blank); const [err, setErr] = useState(""); const [busy, setBusy] = useState(false);
   const [editingId, setEditingId] = useState(null);
-  const startEdit = (r) => { setEditingId(r.id); setForm({ date: r.date, patientName: r.patientName, referralType: r.referralType, referredTo: r.referredTo || "", amount: String(r.amount), notes: r.notes || "" }); setErr(""); };
-  const cancelEdit = () => { setEditingId(null); setForm(blank); setErr(""); };
+  const [panelOpen, setPanelOpen] = useState(false);
+  const openAdd = () => { setEditingId(null); setForm(blank); setErr(""); setPanelOpen(true); };
+  const startEdit = (r) => { setEditingId(r.id); setForm({ date: r.date, patientName: r.patientName, referralType: r.referralType, referredTo: r.referredTo || "", amount: String(r.amount), notes: r.notes || "" }); setErr(""); setPanelOpen(true); };
+  const cancelEdit = () => { setEditingId(null); setForm(blank); setErr(""); setPanelOpen(false); };
   const save = async () => {
     setErr(""); if (!form.patientName.trim() || !form.amount) { setErr("Enter patient name and amount."); return; }
     setBusy(true);
@@ -2507,7 +2572,7 @@ function Referrals({ referrals, addReferral, updateReferral, removeReferral, fy,
     try {
       if (editingId) { await updateReferral(editingId, payload); setEditingId(null); }
       else { await addReferral(payload); }
-      setForm(blank);
+      setForm(blank); setPanelOpen(false);
     } catch (e) { setErr(e.message); }
     setBusy(false);
   };
@@ -2516,8 +2581,7 @@ function Referrals({ referrals, addReferral, updateReferral, removeReferral, fy,
   const total = referrals.filter((r) => r.date >= range.start && r.date <= range.end).reduce((a, r) => a + r.amount, 0);
   return (
     <div>
-      <div className="card">
-        <h2>{editingId ? "Edit referral" : "New referral"}</h2>
+      <SlideOverPanel open={panelOpen} onClose={cancelEdit} title={editingId ? "Edit referral" : "New referral"}>
         <div className="form-grid">
           <div><label>Date</label><input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /></div>
           <div><label>Patient</label><input type="text" value={form.patientName} onChange={(e) => setForm({ ...form, patientName: e.target.value })} /></div>
@@ -2531,9 +2595,12 @@ function Referrals({ referrals, addReferral, updateReferral, removeReferral, fy,
           {editingId && <button className="btn secondary" type="button" onClick={cancelEdit}>Cancel edit</button>}
         </div>
         <ErrorNote msg={err} />
-      </div>
+      </SlideOverPanel>
       <div className="card">
-        <h2>Referral income — FY {fy} total: {inr(total)}</h2>
+        <div className="register-toolbar">
+          <h2 style={{ margin: 0 }}>Referral income — FY {fy} total: {inr(total)}</h2>
+          {can("referrals", "write") && <button className="btn" type="button" onClick={openAdd}>+ Add referral</button>}
+        </div>
         {referrals.length === 0 ? <div className="empty">No referrals recorded yet.</div> : (
           <table><thead><tr><th>Date</th><th>Patient</th><th>Type</th><th>Referred To</th><th className="num">Amount</th><th>Notes</th><th></th></tr></thead>
             <tbody>{[...referrals].sort((a, b) => (a.date < b.date ? 1 : -1)).map((r) => (<tr key={r.id}><td>{r.date}</td><td>{r.patientName}</td><td>{r.referralType}</td><td>{r.referredTo}</td><td className="num">{inr(r.amount)}</td><td>{r.notes}</td><td style={{ display: "flex", gap: 6 }}>{can("referrals", "edit") && <button className="btn secondary small" type="button" onClick={() => startEdit(r)}>Edit</button>}{can("referrals", "delete") && <button className="btn danger small" type="button" onClick={() => remove(r.id)}>Delete</button>}</td></tr>))}</tbody>
@@ -2554,8 +2621,10 @@ function Gifts({ gifts, addGift, updateGift, removeGift, doctors, can }) {
   const blank = { date: todayISO(), repName: "", company: "", gift: "", doctorId: "", amount: "" };
   const [form, setForm] = useState(blank); const [err, setErr] = useState(""); const [busy, setBusy] = useState(false);
   const [editingId, setEditingId] = useState(null);
-  const startEdit = (g) => { setEditingId(g.id); setForm({ date: g.date, repName: g.repName, company: g.company || "", gift: g.gift || "", doctorId: g.doctorId || "", amount: g.amount ? String(g.amount) : "" }); setErr(""); };
-  const cancelEdit = () => { setEditingId(null); setForm(blank); setErr(""); };
+  const [panelOpen, setPanelOpen] = useState(false);
+  const openAdd = () => { setEditingId(null); setForm(blank); setErr(""); setPanelOpen(true); };
+  const startEdit = (g) => { setEditingId(g.id); setForm({ date: g.date, repName: g.repName, company: g.company || "", gift: g.gift || "", doctorId: g.doctorId || "", amount: g.amount ? String(g.amount) : "" }); setErr(""); setPanelOpen(true); };
+  const cancelEdit = () => { setEditingId(null); setForm(blank); setErr(""); setPanelOpen(false); };
   const save = async () => {
     setErr(""); if (!form.repName.trim()) { setErr("Enter the medical rep's name."); return; }
     setBusy(true);
@@ -2563,15 +2632,14 @@ function Gifts({ gifts, addGift, updateGift, removeGift, doctors, can }) {
     try {
       if (editingId) { await updateGift(editingId, payload); setEditingId(null); }
       else { await addGift(payload); }
-      setForm(blank);
+      setForm(blank); setPanelOpen(false);
     } catch (e) { setErr(e.message); }
     setBusy(false);
   };
   const remove = async (id) => { try { await removeGift(id); if (editingId === id) cancelEdit(); } catch (e) { setErr(e.message); } };
   return (
     <div>
-      <div className="card">
-        <h2>{editingId ? "Edit gift entry" : "Log a gift received"}</h2>
+      <SlideOverPanel open={panelOpen} onClose={cancelEdit} title={editingId ? "Edit gift entry" : "Log a gift received"}>
         <div className="form-grid">
           <div><label>Date</label><input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /></div>
           <div><label>Medical rep</label><input type="text" value={form.repName} onChange={(e) => setForm({ ...form, repName: e.target.value })} /></div>
@@ -2586,9 +2654,12 @@ function Gifts({ gifts, addGift, updateGift, removeGift, doctors, can }) {
         </div>
         <ErrorNote msg={err} />
         <div className="note-box">The rep, company, and gift description are always disclosure-only. If you enter an Amount, that value now flows into the Income Statement as "Gift Income" and into the Balance Sheet/Capital Account — leave it blank for non-monetary gifts (samples, stationery, etc.) that shouldn't affect the books. Gifting from pharmaceutical reps to doctors is restricted under India's medical ethics rules (e.g. the Uniform Code for Pharmaceuticals Marketing Practices and NMC's professional-conduct regulations); check current guidance with your professional body if in doubt.</div>
-      </div>
+      </SlideOverPanel>
       <div className="card">
-        <h2>Gifts register</h2>
+        <div className="register-toolbar">
+          <h2 style={{ margin: 0 }}>Gifts register</h2>
+          {can("gifts", "write") && <button className="btn" type="button" onClick={openAdd}>+ Log a gift</button>}
+        </div>
         {gifts.length === 0 ? <div className="empty">No entries yet.</div> : (
           <table><thead><tr><th>Date</th><th>Rep</th><th>Company</th><th>Gift</th><th>Doctor</th><th className="num">Amount</th><th></th></tr></thead>
             <tbody>{[...gifts].sort((a, b) => (a.date < b.date ? 1 : -1)).map((g) => (<tr key={g.id}><td>{g.date}</td><td>{g.repName}</td><td>{g.company}</td><td>{g.gift}</td><td>{g.doctorName || "—"}</td><td className="num">{g.amount ? inr(g.amount) : "—"}</td><td style={{ display: "flex", gap: 6 }}>{can("gifts", "edit") && <button className="btn secondary small" type="button" onClick={() => startEdit(g)}>Edit</button>}{can("gifts", "delete") && <button className="btn danger small" type="button" onClick={() => remove(g.id)}>Delete</button>}</td></tr>))}</tbody>
@@ -2609,10 +2680,12 @@ function Expenses({ expenses, addExpense, updateExpense, removeExpense, fy, pend
   const blank = { date: todayISO(), category: EXPENSE_CATEGORIES[0], amount: "", narration: "", image: null };
   const [form, setForm] = useState(blank); const [err, setErr] = useState(""); const [busy, setBusy] = useState(false);
   const [editingId, setEditingId] = useState(null);
+  const [panelOpen, setPanelOpen] = useState(false);
   const [registerQuery, setRegisterQuery] = useState("");
   useEffect(() => { if (pendingSearch) { setRegisterQuery(pendingSearch); clearPendingSearch(); } }, [pendingSearch, clearPendingSearch]);
-  const startEdit = (e) => { setEditingId(e.id); setForm({ date: e.date, category: e.category, amount: String(e.amount), narration: e.narration || "", image: e.image || null }); setErr(""); };
-  const cancelEdit = () => { setEditingId(null); setForm(blank); setErr(""); };
+  const openAdd = () => { setEditingId(null); setForm(blank); setErr(""); setPanelOpen(true); };
+  const startEdit = (e) => { setEditingId(e.id); setForm({ date: e.date, category: e.category, amount: String(e.amount), narration: e.narration || "", image: e.image || null }); setErr(""); setPanelOpen(true); };
+  const cancelEdit = () => { setEditingId(null); setForm(blank); setErr(""); setPanelOpen(false); };
   const save = async () => {
     setErr(""); if (!form.amount) { setErr("Enter an amount."); return; }
     setBusy(true);
@@ -2620,7 +2693,7 @@ function Expenses({ expenses, addExpense, updateExpense, removeExpense, fy, pend
     try {
       if (editingId) { await updateExpense(editingId, payload); setEditingId(null); }
       else { await addExpense(payload); }
-      setForm(blank);
+      setForm(blank); setPanelOpen(false);
     } catch (e) { setErr(e.message); }
     setBusy(false);
   };
@@ -2634,8 +2707,7 @@ function Expenses({ expenses, addExpense, updateExpense, removeExpense, fy, pend
   const total = inFY.reduce((a, e) => a + e.amount, 0);
   return (
     <div>
-      <div className="card">
-        <h2>{editingId ? "Edit expense" : "New expense"}</h2>
+      <SlideOverPanel open={panelOpen} onClose={cancelEdit} title={editingId ? "Edit expense" : "New expense"}>
         <div className="form-grid">
           <div><label>Date</label><input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /></div>
           <div><label>Category</label><select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>{EXPENSE_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}</select></div>
@@ -2648,13 +2720,16 @@ function Expenses({ expenses, addExpense, updateExpense, removeExpense, fy, pend
           {editingId && <button className="btn secondary" type="button" onClick={cancelEdit}>Cancel edit</button>}
         </div>
         <ErrorNote msg={err} />
-      </div>
+      </SlideOverPanel>
       <div className="card">
         <h2>Category totals — FY {fy} (total: {inr(total)})</h2>
         <table><thead><tr><th>Category</th><th className="num">Amount</th></tr></thead><tbody>{EXPENSE_CATEGORIES.map((c) => (<tr key={c}><td>{c}</td><td className="num">{inr(byCat[c] || 0)}</td></tr>))}</tbody></table>
       </div>
       <div className="card">
-        <h2>All expense entries ({filteredExpenses.length}{registerQuery.trim() ? ` of ${expenses.length}` : ""})</h2>
+        <div className="register-toolbar">
+          <h2 style={{ margin: 0 }}>All expense entries ({filteredExpenses.length}{registerQuery.trim() ? ` of ${expenses.length}` : ""})</h2>
+          {can("expenses", "write") && <button className="btn" type="button" onClick={openAdd}>+ Add expense</button>}
+        </div>
         <input type="text" value={registerQuery} onChange={(e) => setRegisterQuery(e.target.value)} placeholder="Search by narration or category" style={{ width: "100%", maxWidth: 360, marginBottom: 12 }} />
         {filteredExpenses.length === 0 ? <div className="empty">{registerQuery.trim() ? "No expenses match that search." : "No expenses logged yet."}</div> : (
           <table><thead><tr><th>Date</th><th>Category</th><th>Narration</th><th className="num">Amount</th><th>Photo</th><th></th></tr></thead>
@@ -2681,8 +2756,10 @@ function FixedAssets({ assets, addAsset, updateAsset, removeAsset, fy, can }) {
   useEffect(() => { call(`/assets/depreciation?fy=${fy}`).then((d) => setDep({ rows: (d.rows || []).map((r) => ({ ...mapAsset(r), ...r })), totalDep: Number(d.totalDep) })).catch(() => {}); }, [call, fy, assets]);
 
   const [editingId, setEditingId] = useState(null);
-  const startEdit = (a) => { setEditingId(a.id); setForm({ name: a.name, block: a.block, rate: a.rate, purchaseDate: a.purchaseDate, cost: String(a.cost) }); setErr(""); };
-  const cancelEdit = () => { setEditingId(null); setForm(blank); setErr(""); };
+  const [panelOpen, setPanelOpen] = useState(false);
+  const openAdd = () => { setEditingId(null); setForm(blank); setErr(""); setPanelOpen(true); };
+  const startEdit = (a) => { setEditingId(a.id); setForm({ name: a.name, block: a.block, rate: a.rate, purchaseDate: a.purchaseDate, cost: String(a.cost) }); setErr(""); setPanelOpen(true); };
+  const cancelEdit = () => { setEditingId(null); setForm(blank); setErr(""); setPanelOpen(false); };
   const add = async () => {
     setErr(""); if (!form.name.trim() || !form.cost) { setErr("Enter a description and cost."); return; }
     setBusy(true);
@@ -2690,7 +2767,7 @@ function FixedAssets({ assets, addAsset, updateAsset, removeAsset, fy, can }) {
     try {
       if (editingId) { await updateAsset(editingId, payload); setEditingId(null); }
       else { await addAsset(payload); }
-      setForm(blank);
+      setForm(blank); setPanelOpen(false);
     } catch (e) { setErr(e.message); }
     setBusy(false);
   };
@@ -2698,8 +2775,7 @@ function FixedAssets({ assets, addAsset, updateAsset, removeAsset, fy, can }) {
 
   return (
     <div>
-      <div className="card">
-        <h2>{editingId ? "Edit asset" : "Add asset (CAPEX)"}</h2>
+      <SlideOverPanel open={panelOpen} onClose={cancelEdit} title={editingId ? "Edit asset" : "Add asset (CAPEX)"}>
         <div className="form-grid">
           <div><label>Description</label><input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. ECG machine" /></div>
           <div><label>Block of assets</label><select value={form.block} onChange={(e) => { const b = BLOCKS.find((x) => x.name === e.target.value); setForm({ ...form, block: b.name, rate: b.rate }); }}>{BLOCKS.map((b) => <option key={b.name} value={b.name}>{b.name} ({b.rate}%)</option>)}</select></div>
@@ -2712,9 +2788,12 @@ function FixedAssets({ assets, addAsset, updateAsset, removeAsset, fy, can }) {
           {editingId && <button className="btn secondary" type="button" onClick={cancelEdit}>Cancel edit</button>}
         </div>
         <ErrorNote msg={err} />
-      </div>
+      </SlideOverPanel>
       <div className="card">
-        <h2>Depreciation register — FY {fy}</h2>
+        <div className="register-toolbar">
+          <h2 style={{ margin: 0 }}>Depreciation register — FY {fy}</h2>
+          {can("assets", "write") && <button className="btn" type="button" onClick={openAdd}>+ Add asset</button>}
+        </div>
         {dep.rows.length === 0 ? <div className="empty">No fixed assets on the register yet.</div> : (
           <table>
             <thead><tr><th>Asset</th><th>Block</th><th className="num">Rate</th><th className="num">Cost</th><th className="num">Opening WDV</th><th className="num">Depreciation</th><th className="num">Closing WDV</th><th></th></tr></thead>
