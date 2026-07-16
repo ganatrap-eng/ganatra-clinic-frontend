@@ -752,7 +752,14 @@ export default function App() {
           .sidebar .biz{padding:0 20px 16px;font-size:11.5px;color:#B9D8D2;border-bottom:1px solid rgba(255,255,255,.15);margin-bottom:8px;line-height:1.5;word-break:break-all;}
           .nav-item{text-align:left;background:none;border:none;color:#EAF3F1;padding:10px 20px;font-size:13.5px;font-weight:500;cursor:pointer;border-left:3px solid transparent;opacity:.82;display:flex;align-items:center;gap:10px;}
           .nav-icon{font-size:15px;line-height:1;width:18px;text-align:center;flex-shrink:0;}
-          .nav-icon-chip{font-size:13px;line-height:1;width:26px;height:26px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 1px 3px rgba(0,0,0,.25);}
+          .nav-icon-chip{font-size:13px;line-height:1;width:26px;height:26px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;
+            position:relative;overflow:hidden;isolation:isolate;
+            box-shadow:0 1px 3px rgba(0,0,0,.3),inset 0 1px 1px rgba(255,255,255,.55),inset 0 -2px 4px rgba(0,0,0,.2);}
+          .nav-icon-chip::before{content:"";position:absolute;inset:0;z-index:1;
+            background:linear-gradient(115deg,transparent 25%,rgba(255,255,255,.75) 48%,transparent 70%);
+            transform:translateX(-140%);}
+          .nav-item:hover .nav-icon-chip::before{transform:translateX(140%);transition:transform .55s ease;}
+          .nav-icon-chip span{position:relative;z-index:2;}
           .nav-item.active{background:rgba(0,0,0,.22);border-left-color:var(--accent);opacity:1;font-weight:700;}
           .nav-item:hover{opacity:1;}
           .logout{margin-top:auto;padding:12px 20px;font-size:12px;color:#E9CFCF;background:none;border:none;text-align:left;cursor:pointer;text-decoration:underline;}
@@ -771,7 +778,19 @@ export default function App() {
           .launcher-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:18px;}
           .launcher-tile{display:flex;flex-direction:column;align-items:center;gap:10px;background:#fff;border:1px solid #EAE6F5;border-radius:14px;padding:20px 10px;cursor:pointer;transition:transform .12s ease,box-shadow .12s ease;box-shadow:0 2px 6px rgba(80,60,120,.06);}
           .launcher-tile:hover{transform:translateY(-3px);box-shadow:0 8px 20px rgba(80,60,120,.14);}
-          .launcher-icon{width:52px;height:52px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:24px;box-shadow:0 3px 8px rgba(0,0,0,.15);}
+          .launcher-icon{width:52px;height:52px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:24px;
+            position:relative;overflow:hidden;isolation:isolate;
+            box-shadow:0 4px 12px rgba(0,0,0,.18),inset 0 1px 1px rgba(255,255,255,.65),inset 0 -4px 8px rgba(0,0,0,.16);
+            transition:transform .25s cubic-bezier(.34,1.56,.64,1),box-shadow .25s ease;}
+          .launcher-icon::before{content:"";position:absolute;inset:0;z-index:1;
+            background:linear-gradient(115deg,transparent 20%,rgba(255,255,255,.15) 38%,rgba(255,255,255,.85) 48%,rgba(255,255,255,.15) 58%,transparent 76%);
+            transform:translateX(-140%) translateY(-10%);transition:transform .65s ease;}
+          .launcher-icon::after{content:"";position:absolute;inset:0;z-index:1;border-radius:inherit;
+            background:linear-gradient(200deg,rgba(255,255,255,.35) 0%,transparent 30%,transparent 70%,rgba(0,0,0,.12) 100%);
+            mix-blend-mode:overlay;}
+          .launcher-tile:hover .launcher-icon{transform:scale(1.08) rotate(-3deg);box-shadow:0 8px 20px rgba(0,0,0,.24),inset 0 1px 1px rgba(255,255,255,.75),inset 0 -4px 8px rgba(0,0,0,.16);}
+          .launcher-tile:hover .launcher-icon::before{transform:translateX(140%) translateY(10%);}
+          .launcher-icon span{position:relative;z-index:2;filter:drop-shadow(0 1px 1px rgba(0,0,0,.2));}
           .launcher-label{font-size:12.5px;font-weight:600;color:var(--ink);text-align:center;line-height:1.3;}
           .launcher-stat{font-size:10.5px;color:var(--ink-soft);text-align:center;line-height:1.3;margin-top:-2px;}
           .launcher-section{margin-bottom:28px;}
@@ -876,8 +895,8 @@ export default function App() {
         <nav className="sidebar">
           <div className="brand" style={{ cursor: "pointer" }} onClick={() => setView("launcher")} title="Back to app launcher">GANATRA CLINIC</div>
           <div className="biz">{settings.proprietor}<br />{session.name} ({session.userId}) · {session.role}<br /><span style={{ opacity: .7 }}>{origin}</span></div>
-          <button className={"nav-item" + (view === "launcher" ? " active" : "")} onClick={() => setView("launcher")}><span className="nav-icon-chip" style={{ background: `linear-gradient(135deg, #F4A340, #E85D3D)` }}>🔷</span>Home</button>
-          {NAV.filter((n) => !n.adminOnly || session.role === "Admin").filter((n) => !n.module || can(n.module, "view")).map((n) => { const g = GROUP_COLORS[n.group]; return (<button key={n.key} className={"nav-item" + (view === n.key ? " active" : "")} onClick={() => setView(n.key)}><span className="nav-icon-chip" style={{ background: `linear-gradient(135deg, ${g[0]}, ${g[1]})` }}>{n.icon}</span>{n.label}</button>); })}
+          <button className={"nav-item" + (view === "launcher" ? " active" : "")} onClick={() => setView("launcher")}><span className="nav-icon-chip" style={{ background: `linear-gradient(135deg, #F4A340, #E85D3D)` }}><span>🔷</span></span>Home</button>
+          {NAV.filter((n) => !n.adminOnly || session.role === "Admin").filter((n) => !n.module || can(n.module, "view")).map((n) => { const g = GROUP_COLORS[n.group]; return (<button key={n.key} className={"nav-item" + (view === n.key ? " active" : "")} onClick={() => setView(n.key)}><span className="nav-icon-chip" style={{ background: `linear-gradient(135deg, ${g[0]}, ${g[1]})` }}><span>{n.icon}</span></span>{n.label}</button>); })}
           <button className="logout" onClick={() => setSession(null)}>Log out</button>
         </nav>
 
@@ -1191,7 +1210,7 @@ function LauncherGrid({ settings, session, can, setView, cases, collections, exp
     const g = GROUP_COLORS[n.group];
     return (
       <button className="launcher-tile" onClick={() => setView(n.key)} title={n.desc}>
-        <span className="launcher-icon" style={{ background: `linear-gradient(135deg, ${g[0]}, ${g[1]})` }}>{n.icon}</span>
+        <span className="launcher-icon" style={{ background: `linear-gradient(135deg, ${g[0]}, ${g[1]})` }}><span>{n.icon}</span></span>
         <span className="launcher-label">{n.label}</span>
         {microStats[n.key] && <span className="launcher-stat">{microStats[n.key]}</span>}
       </button>
