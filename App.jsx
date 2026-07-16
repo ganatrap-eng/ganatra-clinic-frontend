@@ -31,7 +31,7 @@ const SHIFTS = ["Morning", "Evening"];
 const PAY_TYPES = ["Daily", "Monthly"];
 const COLLECTION_MODES = ["Cash", "UPI", "Card", "Other"];
 const REFERRAL_TYPES = ["Lab Test", "Hospital"];
-const COLORS = ["#0B4F4A", "#C9A227", "#1F8A5F", "#B3423A", "#5B6B69", "#7FB3AB", "#E8C468"];
+const COLORS = ["#714B67", "#C9A227", "#1F8A5F", "#B3423A", "#5B6B69", "#7FB3AB", "#E8C468"];
 
 const PERMISSION_MODULES = [
   { key: "cases", label: "Case Records" },
@@ -456,7 +456,7 @@ function AuthScreen({ onLogin, origin, setOrigin }) {
         ${FONT_IMPORT}
         .auth-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;background:radial-gradient(circle at 25% 15%,#123f3a 0%,#081d1b 65%);font-family:'Inter',sans-serif;padding:24px;}
         .auth-card{width:100%;max-width:440px;background:#fff;border-radius:18px;overflow:hidden;box-shadow:0 30px 70px rgba(0,0,0,.45);}
-        .auth-header{background:linear-gradient(135deg,#0B4F4A,#082F2C);padding:30px 26px 22px;text-align:center;}
+        .auth-header{background:linear-gradient(135deg,#714B67,#4A2F44);padding:30px 26px 22px;text-align:center;}
         .auth-header .brand{font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;color:#fff;font-size:26px;letter-spacing:.5px;margin-top:6px;}
         .auth-header .sub{color:#B9D8D2;font-size:12px;letter-spacing:2px;text-transform:uppercase;margin-top:4px;}
         .pulse-path{stroke:#C9A227;stroke-width:2.5;fill:none;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:340;stroke-dashoffset:340;animation:draw 1.4s ease forwards .2s;}
@@ -465,14 +465,14 @@ function AuthScreen({ onLogin, origin, setOrigin }) {
         .auth-body{padding:26px 26px 24px;}
         .tabs{display:flex;gap:6px;margin-bottom:18px;}
         .tab-btn{flex:1;padding:8px 0;font-size:12.5px;font-weight:700;border:1px solid #E1E8E6;background:#F5F8F7;color:#5B6B69;border-radius:6px;cursor:pointer;}
-        .tab-btn.active{background:#0B4F4A;color:#fff;border-color:#0B4F4A;}
+        .tab-btn.active{background:#714B67;color:#fff;border-color:#714B67;}
         .field{margin-bottom:14px;}
         .field label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:1px;color:#5B6B69;font-weight:700;margin-bottom:5px;}
         .field input,.field select{width:100%;border:1.5px solid #E1E8E6;border-radius:8px;padding:10px 11px;font-size:14.5px;font-family:'IBM Plex Mono',monospace;outline:none;box-sizing:border-box;}
-        .field input:focus,.field select:focus{border-color:#0B4F4A;}
+        .field input:focus,.field select:focus{border-color:#714B67;}
         .field .hint{font-size:10.5px;color:#8a9a97;margin-top:4px;}
         .err{color:#B3423A;font-size:12.5px;margin-bottom:10px;}
-        .info{color:#0B4F4A;font-size:12.5px;margin-bottom:10px;background:#EAF3F1;padding:8px 10px;border-radius:6px;}
+        .info{color:#714B67;font-size:12.5px;margin-bottom:10px;background:#EAF3F1;padding:8px 10px;border-radius:6px;}
         .dev-code{font-family:'IBM Plex Mono',monospace;font-size:22px;letter-spacing:4px;text-align:center;background:#F3E3A8;color:#5b4a06;padding:10px;border-radius:8px;margin-bottom:14px;}
         .submit-btn{width:100%;background:#C9A227;color:#2A2103;font-weight:700;border:none;padding:12px;border-radius:8px;font-size:14.5px;cursor:pointer;box-shadow:0 4px 0 #96791b;}
         .submit-btn:active{transform:translateY(2px);box-shadow:0 2px 0 #96791b;}
@@ -607,7 +607,7 @@ function AuthScreen({ onLogin, origin, setOrigin }) {
 
 /* ============================== NAV / SHELL ============================== */
 const NAV = [
-  { key: "dashboard", label: "Dashboard", icon: "🏠", grad: ["#F4A340", "#E85D3D"] }, { key: "cases", label: "Case Records", module: "cases", icon: "📋", grad: ["#1F9E8C", "#0B4F4A"] },
+  { key: "dashboard", label: "Dashboard", icon: "🏠", grad: ["#F4A340", "#E85D3D"] }, { key: "cases", label: "Case Records", module: "cases", icon: "📋", grad: ["#3FA9D9", "#1F6FA8"] },
   { key: "patientMaster", label: "Patient Master", module: "cases", icon: "🧑‍🤝‍🧑", grad: ["#B45FC7", "#7C3AA6"] },
   { key: "patients", label: "Patient History", module: "cases", icon: "🕒", grad: ["#4A90D9", "#1F5FA8"] },
   { key: "collections", label: "Collections", module: "collections", icon: "💰", grad: ["#3FB86E", "#1F8A5F"] }, { key: "doctors", label: "Doctor Shifts & Pay", module: "doctorPay", icon: "🩺", grad: ["#E8557D", "#B3336B"] },
@@ -730,7 +730,7 @@ export default function App() {
       <div className="app-root">
         <style>{`
           ${FONT_IMPORT}
-          .app-root{--primary:#0B4F4A;--primary-dark:#082F2C;--accent:#C9A227;--accent-soft:#F3E3A8;--bg:#F5F8F7;--surface:#FFFFFF;
+          .app-root{--primary:#714B67;--primary-dark:#4A2F44;--accent:#C9A227;--accent-soft:#F3E3A8;--bg:#F5F8F7;--surface:#FFFFFF;
             --ink:#142524;--ink-soft:#5B6B69;--border:#E1E8E6;--income:#1F8A5F;--expense:#B3423A;
             min-height:100vh;background:var(--bg);font-family:'Inter',sans-serif;color:var(--ink);display:flex;}
           .sidebar{width:230px;background:linear-gradient(180deg,var(--primary),var(--primary-dark));color:#EAF3F1;flex-shrink:0;padding:22px 0;display:flex;flex-direction:column;}
@@ -896,7 +896,7 @@ const MODE_ICONS = { Cash: "💵", UPI: "📱", Card: "💳", Other: "🧾" };
 /** A tiny inline trend line — no axes, no grid, just the shape of the last
  *  N values. Uses Recharts (already a dependency) so this adds no new
  *  packages and no new build risk. */
-function Sparkline({ data, color = "#0B4F4A", height = 34, width = 90 }) {
+function Sparkline({ data, color = "#714B67", height = 34, width = 90 }) {
   if (!data || data.length < 2) return <div style={{ width, height }} />;
   return (
     <ResponsiveContainer width={width} height={height}>
@@ -1084,7 +1084,7 @@ function ShiftCollectionChart({ collections, cases, fy }) {
           <Tooltip formatter={(v) => inr(v)} />
           <Legend />
           <Bar dataKey="Morning" fill="#C9A227" radius={[3, 3, 0, 0]} />
-          <Bar dataKey="Evening" fill="#0B4F4A" radius={[3, 3, 0, 0]} />
+          <Bar dataKey="Evening" fill="#714B67" radius={[3, 3, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>
       <button className="btn secondary small no-print" type="button" onClick={() => setOpen((o) => !o)} style={{ marginTop: 10 }}>📅 Customise date range</button>
@@ -1237,9 +1237,9 @@ function Dashboard({ settings, collections, referrals, expenses, doctorPays, cas
         <h2>📈 Collection trend — last 30 days</h2>
         <ResponsiveContainer width="100%" height={220}>
           <AreaChart data={last30}>
-            <defs><linearGradient id="cg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#0B4F4A" stopOpacity={0.35} /><stop offset="100%" stopColor="#0B4F4A" stopOpacity={0.02} /></linearGradient></defs>
+            <defs><linearGradient id="cg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#714B67" stopOpacity={0.35} /><stop offset="100%" stopColor="#714B67" stopOpacity={0.02} /></linearGradient></defs>
             <CartesianGrid strokeDasharray="3 3" stroke="#E1E8E6" /><XAxis dataKey="date" fontSize={11} /><YAxis fontSize={11} />
-            <Tooltip formatter={(v) => inr(v)} /><Area type="monotone" dataKey="amount" stroke="#0B4F4A" fill="url(#cg)" strokeWidth={2} />
+            <Tooltip formatter={(v) => inr(v)} /><Area type="monotone" dataKey="amount" stroke="#714B67" fill="url(#cg)" strokeWidth={2} />
           </AreaChart>
         </ResponsiveContainer>
       </div>
@@ -2094,7 +2094,7 @@ function DoctorShifts({ doctors, addDoctor, updateDoctor, removeDoctor, doctorPa
       <div className="card">
         <h2>Daily net result — last 14 days</h2>
         <ResponsiveContainer width="100%" height={220}>
-          <BarChart data={last14}><CartesianGrid strokeDasharray="3 3" stroke="#E1E8E6" /><XAxis dataKey="date" tickFormatter={(v) => v.slice(5)} fontSize={11} /><YAxis fontSize={11} /><Tooltip formatter={(v) => inr(v)} /><Bar dataKey="net" fill="#0B4F4A" radius={[4, 4, 0, 0]} /></BarChart>
+          <BarChart data={last14}><CartesianGrid strokeDasharray="3 3" stroke="#E1E8E6" /><XAxis dataKey="date" tickFormatter={(v) => v.slice(5)} fontSize={11} /><YAxis fontSize={11} /><Tooltip formatter={(v) => inr(v)} /><Bar dataKey="net" fill="#714B67" radius={[4, 4, 0, 0]} /></BarChart>
         </ResponsiveContainer>
         <table style={{ marginTop: 10 }}><thead><tr><th>Date</th><th className="num">Collection</th><th className="num">Doctor Pay</th><th className="num">Other Expenses</th><th className="num">Net</th></tr></thead>
           <tbody>{last14.slice().reverse().map((r) => (<tr key={r.date}><td>{r.date}</td><td className="num">{inr(r.collection)}</td><td className="num">{inr(r.pay)}</td><td className="num">{inr(r.otherExp)}</td><td className="num" style={{ color: r.net >= 0 ? "var(--income)" : "var(--expense)" }}>{inr(r.net)}</td></tr>))}</tbody>
