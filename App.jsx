@@ -454,7 +454,7 @@ function AuthScreen({ onLogin, origin, setOrigin }) {
     <div className="auth-wrap">
       <style>{`
         ${FONT_IMPORT}
-        .auth-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;background:radial-gradient(circle at 25% 15%,#123f3a 0%,#081d1b 65%);font-family:'Inter',sans-serif;padding:24px;}
+        .auth-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(160deg,#EFEBFA 0%,#E4DEF5 40%,#F6F3FC 75%,#FDFBFF 100%);font-family:'Inter',sans-serif;padding:24px;}
         .auth-card{width:100%;max-width:440px;background:#fff;border-radius:18px;overflow:hidden;box-shadow:0 30px 70px rgba(0,0,0,.45);}
         .auth-header{background:linear-gradient(135deg,#714B67,#4A2F44);padding:30px 26px 22px;text-align:center;}
         .auth-header .brand{font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;color:#fff;font-size:26px;letter-spacing:.5px;margin-top:6px;}
@@ -474,7 +474,7 @@ function AuthScreen({ onLogin, origin, setOrigin }) {
         .err{color:#B3423A;font-size:12.5px;margin-bottom:10px;}
         .info{color:#714B67;font-size:12.5px;margin-bottom:10px;background:#EAF3F1;padding:8px 10px;border-radius:6px;}
         .dev-code{font-family:'IBM Plex Mono',monospace;font-size:22px;letter-spacing:4px;text-align:center;background:#F3E3A8;color:#5b4a06;padding:10px;border-radius:8px;margin-bottom:14px;}
-        .submit-btn{width:100%;background:#C9A227;color:#2A2103;font-weight:700;border:none;padding:12px;border-radius:8px;font-size:14.5px;cursor:pointer;box-shadow:0 4px 0 #96791b;}
+        .submit-btn{width:100%;background:#714B67;color:#fff;font-weight:700;border:none;padding:12px;border-radius:8px;font-size:14.5px;cursor:pointer;box-shadow:0 4px 0 #4A2F44;}
         .submit-btn:active{transform:translateY(2px);box-shadow:0 2px 0 #96791b;}
         .note{font-size:11px;color:#8a9a97;margin-top:12px;line-height:1.6;text-align:center;}
         .api-field{background:#F5F8F7;border:1px dashed #C9A227;border-radius:8px;padding:10px 12px;margin-bottom:16px;}
