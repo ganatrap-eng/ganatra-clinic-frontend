@@ -937,10 +937,13 @@ export default function App() {
           .activity-feed{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;}
           .activity-col{background:#fff;border:1px solid #EAE6F5;border-radius:12px;padding:14px 16px;}
           .activity-col-title{font-size:12px;font-weight:700;color:var(--ink);margin-bottom:8px;}
-          .activity-row{display:flex;justify-content:space-between;gap:8px;font-size:12.5px;padding:6px 0;border-top:1px solid #F3F0FA;cursor:pointer;}
-          .activity-row:first-of-type{border-top:none;}
-          .activity-row:hover{color:var(--primary);}
-          .activity-when{color:var(--ink-soft);flex-shrink:0;}
+          .activity-table{width:100%;border-collapse:collapse;font-size:12px;}
+          .activity-table th{text-align:left;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--ink-soft);padding:6px 4px;border-bottom:1.5px solid var(--border);}
+          .activity-table th.num{text-align:right;}
+          .activity-table td{padding:7px 4px;border-top:1px solid #F3F0FA;white-space:nowrap;}
+          .activity-table td.num{text-align:right;}
+          .activity-table tbody tr{cursor:pointer;}
+          .activity-table tbody tr:hover td{color:var(--primary);}
           @media(max-width:640px){ .launcher-grid{grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:12px;} .launcher-wrap{padding:22px 14px;} }
           .period-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-bottom:18px;}
           .week-picker{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:-4px 0 10px;}
@@ -1488,19 +1491,25 @@ function LauncherGrid({ settings, session, can, setView, setPendingSearch, cases
             {recentPatients.length > 0 && (
               <div className="activity-col">
                 <div className="activity-col-title">🧑‍🤝‍🧑 Last patients added</div>
-                {recentPatients.map((p) => (<div key={p.id} className="activity-row" onClick={() => setView("patientMaster")}><span>{p.name}</span><span className="activity-when">{p.mobile || "—"}{p.createdAt ? ` · ${formatDate(d10(p.createdAt))}` : ""}</span></div>))}
+                <table className="activity-table"><thead><tr><th>Name</th><th>Mobile</th><th>Date Added</th></tr></thead>
+                  <tbody>{recentPatients.map((p) => (<tr key={p.id} onClick={() => setView("patientMaster")}><td>{p.name}</td><td>{p.mobile || "—"}</td><td>{p.createdAt ? formatDate(d10(p.createdAt)) : "—"}</td></tr>))}</tbody>
+                </table>
               </div>
             )}
             {recentCollections.length > 0 && (
               <div className="activity-col">
                 <div className="activity-col-title">💰 Last collections</div>
-                {recentCollections.map((c) => (<div key={c.id} className="activity-row" onClick={() => setView("collections")}><span>{c.patientName}</span><span className="activity-when">{formatDate(c.date)} · {inr(c.amountCollected)}</span></div>))}
+                <table className="activity-table"><thead><tr><th>Patient Name</th><th>Date</th><th className="num">Amount (₹)</th></tr></thead>
+                  <tbody>{recentCollections.map((c) => (<tr key={c.id} onClick={() => setView("collections")}><td>{c.patientName}</td><td>{formatDate(c.date)}</td><td className="num">{inr(c.amountCollected)}</td></tr>))}</tbody>
+                </table>
               </div>
             )}
             {recentExpenses.length > 0 && (
               <div className="activity-col">
                 <div className="activity-col-title">🧾 Last expenses</div>
-                {recentExpenses.map((e) => (<div key={e.id} className="activity-row" onClick={() => setView("expenses")}><span>{e.category}</span><span className="activity-when">{formatDate(e.date)} · {inr(e.amount)}</span></div>))}
+                <table className="activity-table"><thead><tr><th>Category</th><th>Date</th><th className="num">Amount (₹)</th></tr></thead>
+                  <tbody>{recentExpenses.map((e) => (<tr key={e.id} onClick={() => setView("expenses")}><td>{e.category}</td><td>{formatDate(e.date)}</td><td className="num">{inr(e.amount)}</td></tr>))}</tbody>
+                </table>
               </div>
             )}
           </div>
