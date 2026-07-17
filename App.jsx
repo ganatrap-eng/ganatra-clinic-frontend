@@ -162,6 +162,27 @@ function useSortableRows(rows, columns, defaultKey, defaultDir = "asc") {
   return { sorted, Th };
 }
 
+/**
+ * Universal-search "jump to exact row": given a target row id, scrolls that
+ * row into view and returns its id for ~2.2s so the caller can flash it,
+ * then clears itself automatically. Register/table rows should render
+ * data-row-id={item.id} so this can find them in the DOM.
+ */
+function useRowHighlight(targetId) {
+  const [highlightId, setHighlightId] = useState(null);
+  useEffect(() => { if (targetId) setHighlightId(targetId); }, [targetId]);
+  useEffect(() => {
+    if (!highlightId) return;
+    const raf = requestAnimationFrame(() => {
+      const el = document.querySelector(`[data-row-id="${CSS.escape(String(highlightId))}"]`);
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+    const timer = setTimeout(() => setHighlightId(null), 2200);
+    return () => { cancelAnimationFrame(raf); clearTimeout(timer); };
+  }, [highlightId]);
+  return highlightId;
+}
+
 function ExportRow({ onExcel }) {
   return (
     <div className="export-row no-print">
@@ -478,7 +499,7 @@ function AuthScreen({ onLogin, origin, setOrigin }) {
       if (mode === "login") {
         const data = await localCall("/auth/login", { method: "POST", body: { userId, password } });
         await storeSet("clinic:apiOrigin", origin);
-        onLogin({ token: data.token, userId: data.user.userId, name: data.user.name, role: data.user.role, permissions: data.user.permissions, avatarUrl: data.user.avatarUrl || null });
+        onLogin({ token: data.token, userId: data.user.userId, name: data.user.name, role: data.user.role, permissions: data.user.permissions, avatarUrl: data.user.avatarUrl || null, doctorId: data.user.doctorId || null });
       } else {
         const data = await localCall("/auth/register", { method: "POST", body: { userId, password, name: name || userId, email: email || undefined, mobile: mobile || undefined } });
         if (data.requiresOtp) {
@@ -501,7 +522,7 @@ function AuthScreen({ onLogin, origin, setOrigin }) {
     try {
       const data = await localCall("/auth/verify-admin-otp", { method: "POST", body: { userId, code: otpCode.trim() } });
       await storeSet("clinic:apiOrigin", origin);
-      onLogin({ token: data.token, userId: data.user.userId, name: data.user.name, role: data.user.role, permissions: data.user.permissions, avatarUrl: data.user.avatarUrl || null });
+      onLogin({ token: data.token, userId: data.user.userId, name: data.user.name, role: data.user.role, permissions: data.user.permissions, avatarUrl: data.user.avatarUrl || null, doctorId: data.user.doctorId || null });
     } catch (e) { setError(e.message); }
     setBusy(false);
   };
@@ -833,6 +854,7 @@ export default function App() {
   const updateAsset = useCallback(async (id, body) => { const r = await call(`/assets/${id}`, { method: "PUT", body }); setAssets((p) => p.map((x) => (x.id === id ? mapAsset(r) : x))); }, [call]);
   const removeAsset = useCallback(async (id) => { await call(`/assets/${id}`, { method: "DELETE" }); setAssets((p) => p.filter((x) => x.id !== id)); }, [call]);
   const addCapital = useCallback(async (body) => { const r = await call("/capital", { method: "POST", body }); setCapital((p) => [mapCapital(r), ...p]); }, [call]);
+  const updateCapital = useCallback(async (id, body) => { const r = await call(`/capital/${id}`, { method: "PUT", body }); setCapital((p) => p.map((x) => (x.id === id ? mapCapital(r) : x))); }, [call]);
   const removeCapital = useCallback(async (id) => { await call(`/capital/${id}`, { method: "DELETE" }); setCapital((p) => p.filter((x) => x.id !== id)); }, [call]);
   const mapOther = (r) => ({ id: r.id, category: r.category, txnType: r.txn_type, partyName: r.party_name, amount: Number(r.amount), date: d10(r.txn_date), note: r.note });
   const addOtherBalance = useCallback(async (body) => { const r = await call("/other-balance", { method: "POST", body }); const item = mapOther(r); (item.category === "unsecured_loan" ? setLoans : setDeposits)((p) => [item, ...p]); }, [call]);
@@ -997,6 +1019,9 @@ export default function App() {
           th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.4px;color:var(--ink-soft);border-bottom:2px solid var(--accent);padding:6px 8px;}
           td{padding:7px 8px;border-bottom:1px solid var(--border);font-family:'IBM Plex Mono',monospace;vertical-align:top;}
           tr:last-child td{border-bottom:none;}
+          @keyframes rowHighlightPulse{0%{box-shadow:inset 0 0 0 9999px rgba(201,162,39,.38);}100%{box-shadow:inset 0 0 0 9999px rgba(201,162,39,0);}}
+          .row-highlight td{animation:rowHighlightPulse 2.1s ease-out;}
+          @media (prefers-reduced-motion:reduce){.row-highlight td{animation:none;background:rgba(201,162,39,.25);}}
           .num{text-align:right;}
           .btn{background:var(--primary);color:#fff;border:none;padding:9px 16px;border-radius:7px;font-size:13.5px;font-weight:600;cursor:pointer;}
           .btn.secondary{background:transparent;color:var(--primary);border:1px solid var(--primary);}
@@ -1080,7 +1105,7 @@ export default function App() {
             ) : (
               <>
                 {view === "launcher" && <LauncherGrid settings={settings} session={session} can={can} setView={setView} setPendingSearch={setPendingSearch} cases={cases} collections={collections} expenses={expenses} doctorPays={doctorPays} referrals={referrals} gifts={gifts} doctors={doctors} patientsMaster={patientsMaster} />}
-                {view === "dashboard" && <Dashboard settings={settings} collections={collections} referrals={referrals} expenses={expenses} doctorPays={doctorPays} cases={cases} fy={fy} setView={setView} />}
+                {view === "dashboard" && <Dashboard settings={settings} collections={collections} referrals={referrals} expenses={expenses} doctorPays={doctorPays} cases={cases} fy={fy} setView={setView} session={session} />}
                 {view === "cases" && can("cases", "view") && <CaseRecords cases={cases} addCase={addCase} updateCase={updateCase} removeCase={removeCase} doctors={doctors} patientsMaster={patientsMaster} pendingSearch={view === "cases" ? pendingSearch : null} clearPendingSearch={clearPendingSearch} can={can} />}
                 {view === "patientMaster" && can("cases", "view") && <PatientMaster can={can} patients={patientsMaster} addPatient={addPatientMaster} updatePatient={updatePatientMaster} removePatient={removePatientMaster} pendingSearch={view === "patientMaster" ? pendingSearch : null} clearPendingSearch={clearPendingSearch} />}
                 {view === "patients" && can("cases", "view") && <PatientHistory can={can} updateCase={updateCase} updateCollection={updateCollection} cases={cases} doctors={doctors} />}
@@ -1092,7 +1117,7 @@ export default function App() {
                 {view === "assets" && can("assets", "view") && <FixedAssets assets={assets} addAsset={addAsset} updateAsset={updateAsset} removeAsset={removeAsset} fy={fy} can={can} />}
                 {view === "statements" && can("statements", "view") && <FinancialStatements fy={fy} settings={settings} can={can} />}
                 {view === "auditLog" && can("auditLog", "view") && <AccessReport can={can} />}
-                {view === "settings" && <SettingsPage settings={settings} updateSettings={updateSettings} session={session} origin={origin} capital={capital} addCapital={addCapital} removeCapital={removeCapital} loans={loans} deposits={deposits} addOtherBalance={addOtherBalance} updateOtherBalance={updateOtherBalance} removeOtherBalance={removeOtherBalance} updateAvatar={updateAvatar} can={can} />}
+                {view === "settings" && <SettingsPage settings={settings} updateSettings={updateSettings} session={session} origin={origin} capital={capital} addCapital={addCapital} updateCapital={updateCapital} removeCapital={removeCapital} loans={loans} deposits={deposits} addOtherBalance={addOtherBalance} updateOtherBalance={updateOtherBalance} removeOtherBalance={removeOtherBalance} updateAvatar={updateAvatar} can={can} />}
                 {view === "admin" && session.role === "Admin" && <AdminUsers />}
               </>
             )}
@@ -1482,6 +1507,19 @@ function LauncherGrid({ settings, session, can, setView, setPendingSearch, cases
   const weekExpenseTotal = expenses.filter((e) => e.date >= weekStart && e.date <= t).reduce((s, e) => s + Number(e.amount || 0), 0);
   const weekCollectedTotal = collections.filter((c) => c.date >= weekStart && c.date <= t).reduce((s, c) => s + Number(c.amountCollected || 0), 0);
 
+  // Doctor-role home panel: scoped to the logged-in doctor's own cases/collections
+  // when their account is linked to a doctor-roster entry; otherwise falls back
+  // to the same clinic-wide numbers as before (and says so).
+  const myDoctorId = session.role === "Doctor" ? session.doctorId : null;
+  const myCases = myDoctorId ? cases.filter((c) => c.doctorId === myDoctorId) : cases;
+  const myCaseIdSet = myDoctorId ? new Set(myCases.map((c) => c.id)) : null;
+  const myCollections = myDoctorId ? collections.filter((c) => myCaseIdSet.has(c.caseId)) : collections;
+  const myTodayCasesCount = myDoctorId ? myCases.filter((c) => c.date === t).length : todayCasesCount;
+  const myTodayCollectedTotal = myDoctorId ? myCollections.filter((c) => c.date === t).reduce((s, c) => s + Number(c.amountCollected || 0), 0) : todayCollectedTotal;
+  const myPendingCaseBookings = myDoctorId
+    ? myCases.filter((c) => !collections.some((col) => col.caseId === c.id && (col.mode || Number(col.amountDue) > 0))).length
+    : pendingCaseBookings;
+
   return (
     <div className="launcher-wrap">
       <div className="launcher-header-row">
@@ -1503,22 +1541,22 @@ function LauncherGrid({ settings, session, can, setView, setPendingSearch, cases
               <>
                 {searchResults.patients.length > 0 && (
                   <div className="search-group"><div className="search-group-label">🧑‍🤝‍🧑 Patients</div>
-                    {searchResults.patients.map((p) => <div key={p.id} className="search-item" onClick={() => { setPendingSearch(query); setView("patientMaster"); setSearchOpen(false); }}>{p.name}{p.mobile ? ` — ${p.mobile}` : ""}</div>)}
+                    {searchResults.patients.map((p) => <div key={p.id} className="search-item" onClick={() => { setPendingSearch({ query, id: p.id }); setView("patientMaster"); setSearchOpen(false); }}>{p.name}{p.mobile ? ` — ${p.mobile}` : ""}</div>)}
                   </div>
                 )}
                 {searchResults.cases.length > 0 && (
                   <div className="search-group"><div className="search-group-label">📋 Case Records</div>
-                    {searchResults.cases.map((c) => <div key={c.id} className="search-item" onClick={() => { setPendingSearch(query); setView("cases"); setSearchOpen(false); }}>{c.caseNo} — {c.patientName}</div>)}
+                    {searchResults.cases.map((c) => <div key={c.id} className="search-item" onClick={() => { setPendingSearch({ query, id: c.id }); setView("cases"); setSearchOpen(false); }}>{c.caseNo} — {c.patientName}</div>)}
                   </div>
                 )}
                 {searchResults.collections.length > 0 && (
                   <div className="search-group"><div className="search-group-label">💰 Collections</div>
-                    {searchResults.collections.map((c) => <div key={c.id} className="search-item" onClick={() => { setPendingSearch(query); setView("collections"); setSearchOpen(false); }}>{c.patientName} — {inr(c.amountCollected)} ({c.date})</div>)}
+                    {searchResults.collections.map((c) => <div key={c.id} className="search-item" onClick={() => { setPendingSearch({ query, id: c.id }); setView("collections"); setSearchOpen(false); }}>{c.patientName} — {inr(c.amountCollected)} ({c.date})</div>)}
                   </div>
                 )}
                 {searchResults.expenses.length > 0 && (
                   <div className="search-group"><div className="search-group-label">🧾 Expenses</div>
-                    {searchResults.expenses.map((e) => <div key={e.id} className="search-item" onClick={() => { setPendingSearch(query); setView("expenses"); setSearchOpen(false); }}>{e.category} — {inr(e.amount)} ({e.date})</div>)}
+                    {searchResults.expenses.map((e) => <div key={e.id} className="search-item" onClick={() => { setPendingSearch({ query, id: e.id }); setView("expenses"); setSearchOpen(false); }}>{e.category} — {inr(e.amount)} ({e.date})</div>)}
                   </div>
                 )}
               </>
@@ -1535,12 +1573,13 @@ function LauncherGrid({ settings, session, can, setView, setPendingSearch, cases
 
       {session.role === "Doctor" && (
         <div className="role-panel no-print">
-          <div className="role-panel-label">Today, at a glance</div>
+          <div className="role-panel-label">Today, at a glance{myDoctorId ? "" : " (clinic-wide)"}</div>
           <div className="role-panel-stats">
-            <div className="role-stat" onClick={() => setView("cases")}><span className="role-stat-value">{todayCasesCount}</span><span className="role-stat-label">Case records today</span></div>
-            <div className="role-stat" onClick={() => setView("collections")}><span className="role-stat-value">{inr(todayCollectedTotal)}</span><span className="role-stat-label">Collected today</span></div>
-            <div className="role-stat" onClick={() => setView("collections")}><span className="role-stat-value">{pendingCaseBookings}</span><span className="role-stat-label">Case records pending billing</span></div>
+            <div className="role-stat" onClick={() => setView("cases")}><span className="role-stat-value">{myTodayCasesCount}</span><span className="role-stat-label">Case records today</span></div>
+            <div className="role-stat" onClick={() => setView("collections")}><span className="role-stat-value">{inr(myTodayCollectedTotal)}</span><span className="role-stat-label">Collected today</span></div>
+            <div className="role-stat" onClick={() => setView("collections")}><span className="role-stat-value">{myPendingCaseBookings}</span><span className="role-stat-label">Case records pending billing</span></div>
           </div>
+          {!myDoctorId && <p style={{ fontSize: 12, color: "var(--ink-soft)", marginTop: 8, marginBottom: 0 }}>Showing clinic-wide numbers — ask an Admin to link your account to your doctor profile under User Approvals for your own numbers here.</p>}
         </div>
       )}
       {session.role === "Admin" && (
@@ -1604,7 +1643,7 @@ function LauncherGrid({ settings, session, can, setView, setPendingSearch, cases
   );
 }
 
-function Dashboard({ settings, collections, referrals, expenses, doctorPays, cases, fy, setView }) {
+function Dashboard({ settings, collections, referrals, expenses, doctorPays, cases, fy, setView, session }) {
   const { call } = useApi();
   const [income, setIncome] = useState(null);
   useEffect(() => { call(`/statements/income?fy=${fy}`).then(setIncome).catch(() => setIncome(null)); }, [call, fy]);
@@ -1698,8 +1737,39 @@ function Dashboard({ settings, collections, referrals, expenses, doctorPays, cas
     return Object.entries(totals).sort((a, b) => b[1] - a[1]);
   }, [collections, caseById, range.start, range.end]);
 
+  // "My performance" — only shown to a Doctor-role account linked to a
+  // doctor-roster entry. The clinic-wide numbers below remain unchanged and
+  // still available (subject to the account's own module permissions).
+  const myDoctorId = session?.role === "Doctor" ? session.doctorId : null;
+  const myPerf = useMemo(() => {
+    if (!myDoctorId) return null;
+    const myCaseIds = new Set(cases.filter((c) => c.doctorId === myDoctorId).map((c) => c.id));
+    const myCollections = collections.filter((c) => myCaseIds.has(c.caseId));
+    const sumBetween = (start, end) => myCollections.filter((c) => c.date >= start && c.date <= end).reduce((s, c) => s + Number(c.amountCollected || 0), 0);
+    const myPay = doctorPays.filter((p) => p.doctorId === myDoctorId && p.date >= range.start && p.date <= range.end).reduce((s, p) => s + Number(p.amount || 0), 0);
+    return {
+      todayCases: cases.filter((c) => c.doctorId === myDoctorId && c.date === t).length,
+      todayCollected: sumBetween(t, t),
+      weekCollected: sumBetween(rollingWeekStart, t),
+      fyCollected: sumBetween(range.start, range.end),
+      fyPay: myPay,
+    };
+  }, [myDoctorId, cases, collections, doctorPays, t, rollingWeekStart, range.start, range.end]);
+
   return (
     <div>
+      {myPerf && (
+        <div className="card" style={{ borderLeft: "4px solid var(--primary)", marginBottom: 18 }}>
+          <h2 style={{ marginTop: 0 }}>My performance</h2>
+          <div className="role-panel-stats">
+            <div className="role-stat"><span className="role-stat-value">{myPerf.todayCases}</span><span className="role-stat-label">Case records today</span></div>
+            <div className="role-stat"><span className="role-stat-value">{inr(myPerf.todayCollected)}</span><span className="role-stat-label">Collected today (my cases)</span></div>
+            <div className="role-stat"><span className="role-stat-value">{inr(myPerf.weekCollected)}</span><span className="role-stat-label">Collected — last 7 days</span></div>
+            <div className="role-stat"><span className="role-stat-value">{inr(myPerf.fyCollected)}</span><span className="role-stat-label">Collected — FY {fy}</span></div>
+            <div className="role-stat"><span className="role-stat-value">{inr(myPerf.fyPay)}</span><span className="role-stat-label">My pay — FY {fy}</span></div>
+          </div>
+        </div>
+      )}
       <div className="insight-banner">
         <span className="insight-icon">{weekChangePct === null ? "👋" : weekChangePct >= 0 ? "📈" : "📉"}</span>
         <span>
@@ -1833,7 +1903,8 @@ function CaseRecords({ cases, addCase, updateCase, removeCase, doctors, patients
   const remove = async (id) => { try { await removeCase(id); if (editingId === id) cancelEdit(); } catch (e) { setErr(e.message); } };
   const medValue = (c) => (c.medicines || []).reduce((s, m) => s + m.qty * m.price, 0);
   const [registerQuery, setRegisterQuery] = useState("");
-  useEffect(() => { if (pendingSearch) { setRegisterQuery(pendingSearch); clearPendingSearch(); } }, [pendingSearch, clearPendingSearch]);
+  const highlightId = useRowHighlight(pendingSearch?.id);
+  useEffect(() => { if (pendingSearch) { setRegisterQuery(pendingSearch.query || ""); clearPendingSearch(); } }, [pendingSearch, clearPendingSearch]);
   const filteredCases = registerQuery.trim()
     ? cases.filter((c) => c.patientName.toLowerCase().includes(registerQuery.toLowerCase()) || c.caseNo.toLowerCase().includes(registerQuery.toLowerCase()) || (c.briefHistory || "").toLowerCase().includes(registerQuery.toLowerCase()))
     : cases;
@@ -2002,7 +2073,7 @@ function CaseRecords({ cases, addCase, updateCase, removeCase, doctors, patients
           <table>
             <thead><tr><CaseTh sortKeyName="caseNo">Case No.</CaseTh><CaseTh sortKeyName="date">Date</CaseTh><CaseTh sortKeyName="patientName">Patient</CaseTh><CaseTh sortKeyName="doctorName">Doctor</CaseTh><CaseTh sortKeyName="shift">Shift</CaseTh><CaseTh sortKeyName="briefHistory">History</CaseTh><CaseTh sortKeyName="medValue" className="num">Meds Value</CaseTh><th>Photo</th><th></th></tr></thead>
             <tbody>{sortedCases.map((c) => (
-              <tr key={c.id}><td>{c.caseNo}</td><td>{c.date}</td><td>{c.patientName}</td><td>{c.doctorName || "—"}</td>
+              <tr key={c.id} data-row-id={c.id} className={highlightId === c.id ? "row-highlight" : undefined}><td>{c.caseNo}</td><td>{c.date}</td><td>{c.patientName}</td><td>{c.doctorName || "—"}</td>
                 <td><span className={"pill " + (c.shift || "").toLowerCase()}>{c.shift}</span></td>
                 <td style={{ maxWidth: 180 }}>{c.briefHistory}</td><td className="num">{inr(medValue(c))}</td>
                 <td>{c.image ? "📎" : "—"}</td><td style={{ display: "flex", gap: 6 }}>{can("cases", "edit") && <button className="btn secondary small" type="button" onClick={() => startEdit(c)}>Edit</button>}{can("cases", "delete") && <button className="btn danger small" type="button" onClick={() => remove(c.id)}>Delete</button>}</td></tr>
@@ -2037,7 +2108,8 @@ function PatientMaster({ can, patients, addPatient, updatePatient, removePatient
   const [editingId, setEditingId] = useState(null);
   const [err, setErr] = useState(""); const [busy, setBusy] = useState(false);
   const [query, setQuery] = useState("");
-  useEffect(() => { if (pendingSearch) { setQuery(pendingSearch); clearPendingSearch(); } }, [pendingSearch, clearPendingSearch]);
+  const highlightId = useRowHighlight(pendingSearch?.id);
+  useEffect(() => { if (pendingSearch) { setQuery(pendingSearch.query || ""); clearPendingSearch(); } }, [pendingSearch, clearPendingSearch]);
 
   const [panelOpen, setPanelOpen] = useState(false);
   const openAdd = () => { setEditingId(null); setForm(blank); setErr(""); setPanelOpen(true); };
@@ -2113,7 +2185,7 @@ function PatientMaster({ can, patients, addPatient, updatePatient, removePatient
           <table>
             <thead><tr><Th sortKeyName="name">Name</Th><Th sortKeyName="mobile">Mobile</Th><Th sortKeyName="gender">Gender</Th><Th sortKeyName="dob">DOB</Th><th>Age</th><Th sortKeyName="address">Address</Th><th></th></tr></thead>
             <tbody>{sorted.map((p) => (
-              <tr key={p.id}>
+              <tr key={p.id} data-row-id={p.id} className={highlightId === p.id ? "row-highlight" : undefined}>
                 <td>{p.name}</td><td>{p.mobile}</td><td>{p.gender}</td><td>{p.dob}</td><td>{exactAge(p.dob)}</td><td style={{ maxWidth: 220 }}>{p.address}</td>
                 <td style={{ display: "flex", gap: 6 }}>
                   {can("cases", "edit") && <button className="btn secondary small" type="button" onClick={() => startEdit(p)}>Edit</button>}
@@ -2339,7 +2411,8 @@ function Collections({ collections, addCollection, updateCollection, removeColle
   const [err, setErr] = useState(""); const [busy, setBusy] = useState(false);
   const [rollups, setRollups] = useState({ daily: [], weekly: [], monthly: [] });
   const [registerQuery, setRegisterQuery] = useState("");
-  useEffect(() => { if (pendingSearch) { setRegisterQuery(pendingSearch); clearPendingSearch(); } }, [pendingSearch, clearPendingSearch]);
+  const highlightId = useRowHighlight(pendingSearch?.id);
+  useEffect(() => { if (pendingSearch) { setRegisterQuery(pendingSearch.query || ""); clearPendingSearch(); } }, [pendingSearch, clearPendingSearch]);
   const range = fyRange(fy);
 
   useEffect(() => {
@@ -2499,7 +2572,7 @@ function Collections({ collections, addCollection, updateCollection, removeColle
             <tbody>{[...filteredCollections].sort((a, b) => (a.date < b.date ? 1 : -1)).map((c) => {
               const pending = !c.mode && Number(c.amountDue || 0) === 0 && Number(c.amountCollected || 0) === 0;
               return (
-              <tr key={c.id} style={pending ? { background: "#FFF8E8" } : undefined}><td>{c.date}</td><td>{c.caseNo || "—"}</td><td>{c.patientName}</td><td>{c.phone}</td>
+              <tr key={c.id} data-row-id={c.id} className={highlightId === c.id ? "row-highlight" : undefined} style={pending ? { background: "#FFF8E8" } : undefined}><td>{c.date}</td><td>{c.caseNo || "—"}</td><td>{c.patientName}</td><td>{c.phone}</td>
                 <td className="num">{inr(c.amountDue)}</td><td className="num">{inr(c.amountCollected)}</td>
                 <td className="num" style={{ color: c.balance > 0 ? "var(--expense)" : "var(--income)" }}>{inr(c.balance)}</td>
                 <td>{c.mode || <span style={{ color: "var(--accent)", fontWeight: 700 }}>Pending</span>}</td><td style={{ display: "flex", gap: 6 }}>{can("collections", "edit") && <button className="btn secondary small" type="button" onClick={() => startEdit(c)}>Edit</button>}{can("collections", "delete") && <button className="btn danger small" type="button" onClick={() => remove(c.id)}>Delete</button>}</td></tr>
@@ -2759,7 +2832,8 @@ function Expenses({ expenses, addExpense, updateExpense, removeExpense, fy, pend
   const [editingId, setEditingId] = useState(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const [registerQuery, setRegisterQuery] = useState("");
-  useEffect(() => { if (pendingSearch) { setRegisterQuery(pendingSearch); clearPendingSearch(); } }, [pendingSearch, clearPendingSearch]);
+  const highlightId = useRowHighlight(pendingSearch?.id);
+  useEffect(() => { if (pendingSearch) { setRegisterQuery(pendingSearch.query || ""); clearPendingSearch(); } }, [pendingSearch, clearPendingSearch]);
   const openAdd = () => { setEditingId(null); setForm(blank); setErr(""); setPanelOpen(true); };
   const startEdit = (e) => { setEditingId(e.id); setForm({ date: e.date, category: e.category, amount: String(e.amount), narration: e.narration || "", image: e.image || null }); setErr(""); setPanelOpen(true); };
   const cancelEdit = () => { setEditingId(null); setForm(blank); setErr(""); setPanelOpen(false); };
@@ -2811,7 +2885,7 @@ function Expenses({ expenses, addExpense, updateExpense, removeExpense, fy, pend
         <input type="text" value={registerQuery} onChange={(e) => setRegisterQuery(e.target.value)} placeholder="Search by narration or category" style={{ width: "100%", maxWidth: 360, marginBottom: 12 }} />
         {filteredExpenses.length === 0 ? <div className="empty">{registerQuery.trim() ? "No expenses match that search." : "No expenses logged yet."}</div> : (
           <table><thead><tr><th>Date</th><th>Category</th><th>Narration</th><th className="num">Amount</th><th>Photo</th><th></th></tr></thead>
-            <tbody>{[...filteredExpenses].sort((a, b) => (a.date < b.date ? 1 : -1)).map((e) => (<tr key={e.id}><td>{e.date}</td><td>{e.category}</td><td>{e.narration}</td><td className="num">{inr(e.amount)}</td><td>{e.image ? "📎" : "—"}</td><td style={{ display: "flex", gap: 6 }}>{can("expenses", "edit") && <button className="btn secondary small" type="button" onClick={() => startEdit(e)}>Edit</button>}{can("expenses", "delete") && <button className="btn danger small" type="button" onClick={() => remove(e.id)}>Delete</button>}</td></tr>))}</tbody>
+            <tbody>{[...filteredExpenses].sort((a, b) => (a.date < b.date ? 1 : -1)).map((e) => (<tr key={e.id} data-row-id={e.id} className={highlightId === e.id ? "row-highlight" : undefined}><td>{e.date}</td><td>{e.category}</td><td>{e.narration}</td><td className="num">{inr(e.amount)}</td><td>{e.image ? "📎" : "—"}</td><td style={{ display: "flex", gap: 6 }}>{can("expenses", "edit") && <button className="btn secondary small" type="button" onClick={() => startEdit(e)}>Edit</button>}{can("expenses", "delete") && <button className="btn danger small" type="button" onClick={() => remove(e.id)}>Delete</button>}</td></tr>))}</tbody>
           </table>
         )}
       </div>
@@ -3070,17 +3144,33 @@ function AccessReport({ can }) {
 }
 
 /* ============================== SETTINGS ============================== */
-function SettingsPage({ settings, updateSettings, session, origin, capital, addCapital, removeCapital, loans, deposits, addOtherBalance, updateOtherBalance, removeOtherBalance, updateAvatar, can }) {
+function SettingsPage({ settings, updateSettings, session, origin, capital, addCapital, updateCapital, removeCapital, loans, deposits, addOtherBalance, updateOtherBalance, removeOtherBalance, updateAvatar, can }) {
   const [form, setForm] = useState(settings);
   useEffect(() => setForm(settings), [settings]);
   const [err, setErr] = useState(""); const [busy, setBusy] = useState(false);
   const canEditSettings = session.role === "Admin" || session.role === "Doctor";
 
-  const [cap, setCap] = useState({ date: todayISO(), type: "Introduced", amount: "", note: "" });
+  const capBlank = { date: todayISO(), type: "Introduced", amount: "", note: "" };
+  const [cap, setCap] = useState(capBlank);
   const [capErr, setCapErr] = useState("");
+  const [capEditingId, setCapEditingId] = useState(null);
+  const [capPanelOpen, setCapPanelOpen] = useState(false);
 
   const save = async () => { setErr(""); setBusy(true); try { await updateSettings(form); } catch (e) { setErr(e.message); } setBusy(false); };
-  const saveCap = async () => { setCapErr(""); if (!cap.amount) { setCapErr("Enter an amount."); return; } try { await addCapital({ ...cap, amount: Number(cap.amount) }); setCap({ date: todayISO(), type: "Introduced", amount: "", note: "" }); } catch (e) { setCapErr(e.message); } };
+
+  const openAddCap = () => { setCapEditingId(null); setCap(capBlank); setCapErr(""); setCapPanelOpen(true); };
+  const startEditCap = (c) => { setCapEditingId(c.id); setCap({ date: c.date, type: c.type, amount: String(c.amount), note: c.note || "" }); setCapErr(""); setCapPanelOpen(true); };
+  const cancelEditCap = () => { setCapEditingId(null); setCap(capBlank); setCapErr(""); setCapPanelOpen(false); };
+  const saveCap = async () => {
+    setCapErr(""); if (!cap.amount) { setCapErr("Enter an amount."); return; }
+    const payload = { ...cap, amount: Number(cap.amount) };
+    try {
+      if (capEditingId) { await updateCapital(capEditingId, payload); setCapEditingId(null); }
+      else { await addCapital(payload); }
+      setCap(capBlank); setCapPanelOpen(false);
+    } catch (e) { setCapErr(e.message); }
+  };
+  const removeCap = async (id) => { try { await removeCapital(id); if (capEditingId === id) cancelEditCap(); } catch (e) { setCapErr(e.message); } };
 
   return (
     <div>
@@ -3102,17 +3192,31 @@ function SettingsPage({ settings, updateSettings, session, origin, capital, addC
       </div>
 
       <div className="card">
-        <h2>Capital account entries</h2>
-        <div className="form-grid">
-          <div><label>Date</label><input type="date" value={cap.date} onChange={(e) => setCap({ ...cap, date: e.target.value })} /></div>
-          <div><label>Type</label><select value={cap.type} onChange={(e) => setCap({ ...cap, type: e.target.value })}><option value="Introduced">Capital Introduced</option><option value="Drawings">Drawings</option></select></div>
-          <div><label>Amount (₹)</label><input type="number" value={cap.amount} onChange={(e) => setCap({ ...cap, amount: e.target.value })} /></div>
-          <div><label>Note</label><input type="text" value={cap.note} onChange={(e) => setCap({ ...cap, note: e.target.value })} /></div>
+        <SlideOverPanel open={capPanelOpen} onClose={cancelEditCap} title={capEditingId ? "Edit capital entry" : "Add capital entry"}>
+          <div className="form-grid">
+            <div><label>Date</label><input type="date" value={cap.date} onChange={(e) => setCap({ ...cap, date: e.target.value })} /></div>
+            <div><label>Type</label><select value={cap.type} onChange={(e) => setCap({ ...cap, type: e.target.value })}><option value="Introduced">Capital Introduced</option><option value="Drawings">Drawings</option></select></div>
+            <div><label>Amount (₹)</label><input type="number" value={cap.amount} onChange={(e) => setCap({ ...cap, amount: e.target.value })} /></div>
+            <div><label>Note</label><input type="text" value={cap.note} onChange={(e) => setCap({ ...cap, note: e.target.value })} /></div>
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            {(capEditingId ? can("statements", "edit") : can("statements", "write")) && <button className="btn" type="button" onClick={saveCap}>{capEditingId ? "Update entry" : "Save entry"}</button>}
+            {capEditingId && <button className="btn secondary" type="button" onClick={cancelEditCap}>Cancel edit</button>}
+          </div>
+          <ErrorNote msg={capErr} />
+        </SlideOverPanel>
+        <div className="register-toolbar">
+          <h2 style={{ margin: 0 }}>Capital account entries</h2>
+          {can("statements", "write") && <button className="btn" type="button" onClick={openAddCap}>+ Add capital entry</button>}
         </div>
-        {can("statements", "write") && <button className="btn" type="button" onClick={saveCap}>Save entry</button>}
-        <ErrorNote msg={capErr} />
         <table style={{ marginTop: 14 }}><thead><tr><th>Date</th><th>Type</th><th className="num">Amount</th><th>Note</th><th></th></tr></thead>
-          <tbody>{[...capital].sort((a, b) => (a.date < b.date ? 1 : -1)).map((c) => (<tr key={c.id}><td>{c.date}</td><td>{c.type}</td><td className="num">{inr(c.amount)}</td><td>{c.note}</td><td>{can("statements", "delete") && <button className="btn danger small" type="button" onClick={() => removeCapital(c.id)}>Delete</button>}</td></tr>))}</tbody>
+          <tbody>{[...capital].sort((a, b) => (a.date < b.date ? 1 : -1)).map((c) => (
+            <tr key={c.id}><td>{c.date}</td><td>{c.type}</td><td className="num">{inr(c.amount)}</td><td>{c.note}</td>
+              <td style={{ display: "flex", gap: 6 }}>
+                {can("statements", "edit") && <button className="btn secondary small" type="button" onClick={() => startEditCap(c)}>Edit</button>}
+                {can("statements", "delete") && <button className="btn danger small" type="button" onClick={() => removeCap(c.id)}>Delete</button>}
+              </td></tr>
+          ))}</tbody>
         </table>
       </div>
 
@@ -3142,16 +3246,18 @@ function LoanDepositSection({ title, category, types, partyLabel, items, addOthe
   const [form, setForm] = useState(blank);
   const [editingId, setEditingId] = useState(null);
   const [err, setErr] = useState("");
+  const [panelOpen, setPanelOpen] = useState(false);
 
-  const startEdit = (item) => { setEditingId(item.id); setForm({ txnType: item.txnType, partyName: item.partyName || "", amount: String(item.amount), date: item.date, note: item.note || "" }); setErr(""); };
-  const cancelEdit = () => { setEditingId(null); setForm(blank); setErr(""); };
+  const openAdd = () => { setEditingId(null); setForm(blank); setErr(""); setPanelOpen(true); };
+  const startEdit = (item) => { setEditingId(item.id); setForm({ txnType: item.txnType, partyName: item.partyName || "", amount: String(item.amount), date: item.date, note: item.note || "" }); setErr(""); setPanelOpen(true); };
+  const cancelEdit = () => { setEditingId(null); setForm(blank); setErr(""); setPanelOpen(false); };
   const save = async () => {
     setErr(""); if (!form.amount) { setErr("Enter an amount."); return; }
     const payload = { category, ...form, amount: Number(form.amount) };
     try {
       if (editingId) { await updateOtherBalance(editingId, payload); setEditingId(null); }
       else { await addOtherBalance(payload); }
-      setForm(blank);
+      setForm(blank); setPanelOpen(false);
     } catch (e) { setErr(e.message); }
   };
   const remove = async (id) => { try { await removeOtherBalance(id, category); if (editingId === id) cancelEdit(); } catch (e) { setErr(e.message); } };
@@ -3160,19 +3266,24 @@ function LoanDepositSection({ title, category, types, partyLabel, items, addOthe
 
   return (
     <div className="card">
-      <h2>{title} — current balance: {inr(balance)}</h2>
-      <div className="form-grid">
-        <div><label>Date</label><input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /></div>
-        <div><label>Type</label><select value={form.txnType} onChange={(e) => setForm({ ...form, txnType: e.target.value })}>{types.map((t) => <option key={t} value={t}>{t}</option>)}</select></div>
-        <div><label>{partyLabel}</label><input type="text" value={form.partyName} onChange={(e) => setForm({ ...form, partyName: e.target.value })} /></div>
-        <div><label>Amount (₹)</label><input type="number" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} /></div>
-        <div><label>Note</label><input type="text" value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} /></div>
+      <SlideOverPanel open={panelOpen} onClose={cancelEdit} title={editingId ? `Edit ${title.toLowerCase()} entry` : `Add ${title.toLowerCase()} entry`}>
+        <div className="form-grid">
+          <div><label>Date</label><input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /></div>
+          <div><label>Type</label><select value={form.txnType} onChange={(e) => setForm({ ...form, txnType: e.target.value })}>{types.map((t) => <option key={t} value={t}>{t}</option>)}</select></div>
+          <div><label>{partyLabel}</label><input type="text" value={form.partyName} onChange={(e) => setForm({ ...form, partyName: e.target.value })} /></div>
+          <div><label>Amount (₹)</label><input type="number" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} /></div>
+          <div><label>Note</label><input type="text" value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} /></div>
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          {(editingId ? can("statements", "edit") : can("statements", "write")) && <button className="btn" type="button" onClick={save}>{editingId ? "Update entry" : "Save entry"}</button>}
+          {editingId && <button className="btn secondary" type="button" onClick={cancelEdit}>Cancel edit</button>}
+        </div>
+        <ErrorNote msg={err} />
+      </SlideOverPanel>
+      <div className="register-toolbar">
+        <h2 style={{ margin: 0 }}>{title} — current balance: {inr(balance)}</h2>
+        {can("statements", "write") && <button className="btn" type="button" onClick={openAdd}>+ Add entry</button>}
       </div>
-      <div style={{ display: "flex", gap: 8 }}>
-        {(editingId ? can("statements", "edit") : can("statements", "write")) && <button className="btn" type="button" onClick={save}>{editingId ? "Update entry" : "Save entry"}</button>}
-        {editingId && <button className="btn secondary" type="button" onClick={cancelEdit}>Cancel edit</button>}
-      </div>
-      <ErrorNote msg={err} />
       {items.length > 0 && (
         <table style={{ marginTop: 14 }}><thead><tr><th>Date</th><th>Type</th><th>{partyLabel}</th><th className="num">Amount</th><th>Note</th><th></th></tr></thead>
           <tbody>{[...items].sort((a, b) => (a.date < b.date ? 1 : -1)).map((x) => (
@@ -3193,20 +3304,22 @@ function LoanDepositSection({ title, category, types, partyLabel, items, addOthe
 function AdminUsers() {
   const { call } = useApi();
   const [users, setUsers] = useState([]);
+  const [doctorsList, setDoctorsList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
-  const [drafts, setDrafts] = useState({}); // userId -> { role, permissions }
+  const [drafts, setDrafts] = useState({}); // userId -> { role, permissions, doctorId }
 
   const load = () => {
     setLoading(true); setErr("");
     call("/admin/users").then((rows) => {
       setUsers(rows);
       const d = {};
-      rows.forEach((u) => { d[u.id] = { role: u.role || "Staff", permissions: u.permissions && Object.keys(u.permissions).length ? u.permissions : Object.fromEntries(PERMISSION_MODULES.map((m) => [m.key, { level: "none", export: false }])) }; });
+      rows.forEach((u) => { d[u.id] = { role: u.role || "Staff", doctorId: u.doctor_id || "", permissions: u.permissions && Object.keys(u.permissions).length ? u.permissions : Object.fromEntries(PERMISSION_MODULES.map((m) => [m.key, { level: "none", export: false }])) }; });
       setDrafts(d);
     }).catch((e) => setErr(e.message)).finally(() => setLoading(false));
   };
   useEffect(load, [call]);
+  useEffect(() => { call("/doctors").then(setDoctorsList).catch(() => setDoctorsList([])); }, [call]);
 
   const setLevel = (userId, moduleKey, level) => {
     setDrafts((p) => ({ ...p, [userId]: { ...p[userId], permissions: { ...p[userId].permissions, [moduleKey]: { ...p[userId].permissions[moduleKey], level } } } }));
@@ -3215,11 +3328,12 @@ function AdminUsers() {
     setDrafts((p) => ({ ...p, [userId]: { ...p[userId], permissions: { ...p[userId].permissions, [moduleKey]: { ...p[userId].permissions[moduleKey], export: exp } } } }));
   };
   const setRole = (userId, role) => setDrafts((p) => ({ ...p, [userId]: { ...p[userId], role } }));
+  const setDoctorLink = (userId, doctorId) => setDrafts((p) => ({ ...p, [userId]: { ...p[userId], doctorId } }));
 
   const save = async (userId, activate) => {
     setErr("");
     try {
-      await call(`/admin/users/${userId}/permissions`, { method: "PUT", body: { role: drafts[userId].role, permissions: drafts[userId].permissions, activate } });
+      await call(`/admin/users/${userId}/permissions`, { method: "PUT", body: { role: drafts[userId].role, permissions: drafts[userId].permissions, doctorId: drafts[userId].doctorId || null, activate } });
       load();
     } catch (e) { setErr(e.message); }
   };
@@ -3232,7 +3346,7 @@ function AdminUsers() {
   const others = users.filter((u) => u.status !== "pending_approval");
 
   const UserCard = ({ u }) => {
-    const d = drafts[u.id] || { role: "Staff", permissions: {} };
+    const d = drafts[u.id] || { role: "Staff", doctorId: "", permissions: {} };
     return (
       <div className="card" key={u.id}>
         <h2>{u.name} <span style={{ fontWeight: 400, fontSize: 13, color: "var(--ink-soft)" }}>({u.user_id})</span></h2>
@@ -3242,7 +3356,15 @@ function AdminUsers() {
         </p>
         <div className="form-grid" style={{ maxWidth: 260 }}>
           <div><label>Role label</label><input type="text" value={d.role} onChange={(e) => setRole(u.id, e.target.value)} placeholder="e.g. Nurse, Reception" /></div>
+          <div>
+            <label>Linked doctor profile</label>
+            <select value={d.doctorId || ""} onChange={(e) => setDoctorLink(u.id, e.target.value)}>
+              <option value="">— None —</option>
+              {doctorsList.map((doc) => <option key={doc.id} value={doc.id}>{doc.name}</option>)}
+            </select>
+          </div>
         </div>
+        {d.role === "Doctor" && !d.doctorId && <p style={{ fontSize: 12, color: "var(--accent)", marginTop: -8 }}>Not linked yet — this account's dashboard will show clinic-wide numbers until linked to a doctor profile.</p>}
         <table>
           <thead><tr><th>Module</th><th>Access level</th><th>Export</th></tr></thead>
           <tbody>
