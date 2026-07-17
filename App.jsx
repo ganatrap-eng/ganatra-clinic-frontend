@@ -985,6 +985,7 @@ export default function App() {
           .balance-tag{font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:600;padding:4px 10px;border-radius:6px;display:inline-block;}
           .balance-tag.ok{background:#e3efe6;color:var(--income);} .balance-tag.bad{background:#f6e4e4;color:var(--expense);}
           .export-row{display:flex;gap:8px;margin-top:12px;}
+          .report-actions{display:flex;gap:8px;flex-wrap:wrap;flex-shrink:0;}
           .imgcap{margin-top:4px;} .imgcap-thumb{max-width:160px;max-height:120px;border-radius:8px;border:1px solid var(--border);display:block;margin-bottom:6px;}
           .imgcap-preview-wrap{width:100%;max-width:260px;height:170px;overflow:hidden;border:1px dashed var(--border);border-radius:8px;display:flex;align-items:center;justify-content:center;margin-bottom:8px;background:#fafcfb;}
           .imgcap-preview{max-width:90%;max-height:90%;transition:transform .15s;}
@@ -1210,9 +1211,13 @@ function DrillDownPanel({ drill, onClose }) {
 
   return (
     <div className="card" style={{ borderColor: "var(--accent)", borderWidth: 2 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-        <h2>{drill.title} — {drill.rows.length} record(s), total {inr(total)}</h2>
-        <button className="btn secondary small no-print" type="button" onClick={onClose}>✕ Close</button>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 10 }}>
+        <h2 style={{ margin: 0 }}>{drill.title} — {drill.rows.length} record(s), total {inr(total)}</h2>
+        <div className="report-actions no-print">
+          <button className="btn secondary small" type="button" onClick={doExcel}>⬇ Export Excel</button>
+          <button className="btn secondary small" type="button" onClick={doPrint}>⎙ Export PDF</button>
+          <button className="btn secondary small" type="button" onClick={onClose}>✕ Close</button>
+        </div>
       </div>
       {drill.rows.length === 0 ? <div className="empty">No records in this range.</div> : (
         <table>
@@ -1225,10 +1230,6 @@ function DrillDownPanel({ drill, onClose }) {
           ))}</tbody>
         </table>
       )}
-      <div className="export-row no-print">
-        <button className="btn secondary small" type="button" onClick={doExcel}>⬇ Export Excel</button>
-        <button className="btn secondary small" type="button" onClick={doPrint}>⎙ Export PDF</button>
-      </div>
     </div>
   );
 }
@@ -1281,8 +1282,21 @@ function ShiftCollectionChart({ collections, cases, fy }) {
 
   return (
     <div className="card">
-      <h2>Morning vs Evening Collection — {from} to {to}</h2>
-      <p style={{ fontSize: 12.5, color: "var(--ink-soft)", marginTop: -8 }}>Morning {inr(totals.Morning)} · Evening {inr(totals.Evening)} · Unlinked {inr(totals.Unlinked)} (collections not tied to a case record, so shift is unknown)</p>
+      <div className="register-toolbar">
+        <h2 style={{ margin: 0 }}>Morning vs Evening Collection — {from} to {to}</h2>
+        <div className="report-actions no-print">
+          <button className="btn secondary small" type="button" onClick={() => setOpen((o) => !o)}>📅 Customise date range</button>
+          <button className="btn secondary small" type="button" onClick={doExcel}>⬇ Export Excel</button>
+          <button className="btn secondary small" type="button" onClick={doPrint}>⎙ Export PDF</button>
+        </div>
+      </div>
+      {open && (
+        <div className="custom-export-panel">
+          <div><label>From</label><input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></div>
+          <div><label>To</label><input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></div>
+        </div>
+      )}
+      <p style={{ fontSize: 12.5, color: "var(--ink-soft)", marginTop: 8 }}>Morning {inr(totals.Morning)} · Evening {inr(totals.Evening)} · Unlinked {inr(totals.Unlinked)} (collections not tied to a case record, so shift is unknown)</p>
       <ResponsiveContainer width="100%" height={260}>
         <BarChart data={dayRows}>
           <CartesianGrid strokeDasharray="3 3" stroke="#E1E8E6" />
@@ -1294,17 +1308,6 @@ function ShiftCollectionChart({ collections, cases, fy }) {
           <Bar dataKey="Evening" fill="#714B67" radius={[3, 3, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>
-      <button className="btn secondary small no-print" type="button" onClick={() => setOpen((o) => !o)} style={{ marginTop: 10 }}>📅 Customise date range</button>
-      {open && (
-        <div className="custom-export-panel">
-          <div><label>From</label><input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></div>
-          <div><label>To</label><input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></div>
-        </div>
-      )}
-      <div className="export-row no-print">
-        <button className="btn secondary small" type="button" onClick={doExcel}>⬇ Export Excel</button>
-        <button className="btn secondary small" type="button" onClick={doPrint}>⎙ Export PDF</button>
-      </div>
     </div>
   );
 }
@@ -1898,6 +1901,7 @@ function CaseRecords({ cases, addCase, updateCase, removeCase, doctors, patients
         <div className="register-toolbar">
           <h2 style={{ margin: 0 }}>Case register ({sortedCases.length}{registerQuery.trim() ? ` of ${cases.length}` : ""})</h2>
           {can("cases", "write") && <button className="btn" type="button" onClick={openAdd}>+ Add case record</button>}
+          <CustomExport rows={sortedCases} dateField="date" filenameBase="case-records" printTitle="Case Records" canExport={can("cases", "export")} buildSheets={(rows) => ({ Cases: rows.map((c) => ({ CaseNo: c.caseNo, Date: c.date, Patient: c.patientName, Phone: c.phone, Doctor: c.doctorName, Shift: c.shift, History: c.briefHistory, ExternalPrescription: c.externalPrescription, MedicinesDispensedValue: medValue(c) })) })} printColumns={[{ label: "Case No.", value: (c) => c.caseNo }, { label: "Date", value: (c) => c.date }, { label: "Patient", value: (c) => c.patientName }, { label: "Doctor", value: (c) => c.doctorName }, { label: "Shift", value: (c) => c.shift }, { label: "History", value: (c) => c.briefHistory }]} />
         </div>
         <input type="text" value={registerQuery} onChange={(e) => setRegisterQuery(e.target.value)} placeholder="Search by patient name, case no., or history" style={{ width: "100%", maxWidth: 360, marginBottom: 12 }} />
         {cases.length === 0 ? <div className="empty">No case papers recorded yet.</div> : (
@@ -1911,14 +1915,6 @@ function CaseRecords({ cases, addCase, updateCase, removeCase, doctors, patients
             ))}</tbody>
           </table>
         )}
-        <CustomExport
-          rows={sortedCases} dateField="date" filenameBase="case-records" printTitle="Case Records" canExport={can("cases", "export")}
-          buildSheets={(rows) => ({ Cases: rows.map((c) => ({ CaseNo: c.caseNo, Date: c.date, Patient: c.patientName, Phone: c.phone, Doctor: c.doctorName, Shift: c.shift, History: c.briefHistory, ExternalPrescription: c.externalPrescription, MedicinesDispensedValue: medValue(c) })) })}
-          printColumns={[
-            { label: "Case No.", value: (c) => c.caseNo }, { label: "Date", value: (c) => c.date }, { label: "Patient", value: (c) => c.patientName },
-            { label: "Doctor", value: (c) => c.doctorName }, { label: "Shift", value: (c) => c.shift }, { label: "History", value: (c) => c.briefHistory },
-          ]}
-        />
       </div>
     </div>
   );
@@ -2010,7 +2006,13 @@ function PatientMaster({ can, patients, addPatient, updatePatient, removePatient
       <div className="card">
         <div className="register-toolbar">
           <h2 style={{ margin: 0 }}>Patient register ({filtered.length})</h2>
-          {can("cases", "write") && <button className="btn" type="button" onClick={openAdd}>+ Add patient</button>}
+          <div className="report-actions">
+            {can("cases", "write") && <button className="btn" type="button" onClick={openAdd}>+ Add patient</button>}
+            {can("cases", "export") && (<>
+              <button className="btn secondary small no-print" type="button" onClick={doExcel}>⬇ Export Excel</button>
+              <button className="btn secondary small no-print" type="button" onClick={doPrint}>⎙ Export PDF</button>
+            </>)}
+          </div>
         </div>
         <input type="text" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search by name or mobile number" style={{ width: "100%", maxWidth: 360, marginBottom: 12 }} />
         {sorted.length === 0 ? <div className="empty">No patients found.</div> : (
@@ -2026,12 +2028,6 @@ function PatientMaster({ can, patients, addPatient, updatePatient, removePatient
               </tr>
             ))}</tbody>
           </table>
-        )}
-        {can("cases", "export") && (
-          <div className="export-row no-print">
-            <button className="btn secondary small" type="button" onClick={doExcel}>⬇ Export Excel</button>
-            <button className="btn secondary small" type="button" onClick={doPrint}>⎙ Export PDF</button>
-          </div>
         )}
         <div className="note-box">Export respects your current search and column sort — sort by any header, filter with the search box, then export exactly what you see.</div>
       </div>
@@ -2188,7 +2184,15 @@ function PatientHistory({ can, updateCase, updateCollection, cases, doctors }) {
       {selected && (
         <>
           <div className="card">
-            <h2>{selected.patient_name}{selected.phone ? ` — ${selected.phone}` : ""}</h2>
+            <div className="register-toolbar">
+              <h2 style={{ margin: 0 }}>{selected.patient_name}{selected.phone ? ` — ${selected.phone}` : ""}</h2>
+              {can("cases", "export") && (
+                <div className="report-actions no-print">
+                  <button className="btn secondary small" type="button" onClick={doExcel}>⬇ Export Excel</button>
+                  <button className="btn secondary small" type="button" onClick={doPrint}>⎙ Export PDF</button>
+                </div>
+              )}
+            </div>
             <div className="form-grid" style={{ maxWidth: 340 }}>
               <div><label>From</label><input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></div>
               <div><label>To</label><input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></div>
@@ -2223,12 +2227,6 @@ function PatientHistory({ can, updateCase, updateCollection, cases, doctors }) {
                         <td className="num" style={{ color: c.balance > 0 ? "var(--expense)" : "var(--income)" }}>{inr(c.balance)}</td><td>{c.mode}</td><td>{can("collections", "edit") && <button className="btn secondary small" type="button" onClick={() => startEditColl(c)}>Edit</button>}</td></tr>
                     ))}</tbody>
                   </table>
-                )}
-                {can("cases", "export") && (
-                  <div className="export-row no-print">
-                    <button className="btn secondary small" type="button" onClick={doExcel}>⬇ Export Excel</button>
-                    <button className="btn secondary small" type="button" onClick={doPrint}>⎙ Export PDF</button>
-                  </div>
                 )}
               </div>
             </>
@@ -2398,6 +2396,7 @@ function Collections({ collections, addCollection, updateCollection, removeColle
         <div className="register-toolbar">
           <h2 style={{ margin: 0 }}>Collection register ({filteredCollections.length}{registerQuery.trim() ? ` of ${collections.length}` : ""})</h2>
           {can("collections", "write") && <button className="btn" type="button" onClick={openAdd}>+ Add collection entry</button>}
+          <CustomExport rows={filteredCollections} dateField="date" filenameBase="collections" printTitle="Collections" canExport={can("collections", "export")} buildSheets={(rows) => ({ Collections: rows, Daily: rollups.daily, Weekly: rollups.weekly, Monthly: rollups.monthly })} printColumns={[{ label: "Date", value: (r) => r.date }, { label: "Case No.", value: (r) => r.caseNo }, { label: "Patient", value: (r) => r.patientName }, { label: "Due", value: (r) => inr(r.amountDue) }, { label: "Collected", value: (r) => inr(r.amountCollected) }, { label: "Balance", value: (r) => inr(r.balance) }]} />
         </div>
         <input type="text" value={registerQuery} onChange={(e) => setRegisterQuery(e.target.value)} placeholder="Search by patient name or case no." style={{ width: "100%", maxWidth: 360, marginBottom: 12 }} />
         {filteredCollections.length === 0 ? <div className="empty">No collections match.</div> : (
@@ -2413,14 +2412,6 @@ function Collections({ collections, addCollection, updateCollection, removeColle
             );})}</tbody>
           </table>
         )}
-        <CustomExport
-          rows={filteredCollections} dateField="date" filenameBase="collections" printTitle="Collections" canExport={can("collections", "export")}
-          buildSheets={(rows) => ({ Collections: rows, Daily: rollups.daily, Weekly: rollups.weekly, Monthly: rollups.monthly })}
-          printColumns={[
-            { label: "Date", value: (r) => r.date }, { label: "Case No.", value: (r) => r.caseNo }, { label: "Patient", value: (r) => r.patientName },
-            { label: "Due", value: (r) => inr(r.amountDue) }, { label: "Collected", value: (r) => inr(r.amountCollected) }, { label: "Balance", value: (r) => inr(r.balance) },
-          ]}
-        />
         {can("collections", "export") && <div className="note-box">Leave both dates blank in "Custom range export" and it exports every collection on record — a full downloadable database, not just a date range.</div>}
       </div>
       <div className="card">
@@ -2536,15 +2527,11 @@ function DoctorShifts({ doctors, addDoctor, updateDoctor, removeDoctor, doctorPa
         <div className="register-toolbar">
           <h2 style={{ margin: 0 }}>Pay entries</h2>
           {can("doctorPay", "write") && <button className="btn" type="button" onClick={openAddPay}>+ Log pay entry</button>}
+          <CustomExport rows={doctorPays} dateField="date" filenameBase="doctor-pay" printTitle="Doctor Shifts & Pay" canExport={can("doctorPay", "export")} buildSheets={(rows) => ({ DoctorPay: rows.map((x) => ({ Date: x.date, Doctor: x.doctorName, Amount: x.amount })) })} printColumns={[{ label: "Date", value: (x) => x.date }, { label: "Doctor", value: (x) => x.doctorName }, { label: "Amount", value: (x) => inr(x.amount) }]} />
         </div>
         <table style={{ marginTop: 14 }}><thead><tr><th>Date</th><th>Doctor</th><th className="num">Amount</th><th></th></tr></thead>
           <tbody>{[...doctorPays].sort((a, b) => (a.date < b.date ? 1 : -1)).map((x) => (<tr key={x.id}><td>{x.date}</td><td>{x.doctorName}</td><td className="num">{inr(x.amount)}</td><td style={{ display: "flex", gap: 6 }}>{can("doctorPay", "edit") && <button className="btn secondary small" type="button" onClick={() => startEditPay(x)}>Edit</button>}{can("doctorPay", "delete") && <button className="btn danger small" type="button" onClick={() => delPay(x.id)}>Delete</button>}</td></tr>))}</tbody>
         </table>
-        <CustomExport
-          rows={doctorPays} dateField="date" filenameBase="doctor-pay" printTitle="Doctor Shifts & Pay" canExport={can("doctorPay", "export")}
-          buildSheets={(rows) => ({ DoctorPay: rows.map((x) => ({ Date: x.date, Doctor: x.doctorName, Amount: x.amount })) })}
-          printColumns={[{ label: "Date", value: (x) => x.date }, { label: "Doctor", value: (x) => x.doctorName }, { label: "Amount", value: (x) => inr(x.amount) }]}
-        />
       </div>
       <div className="card">
         <h2>Daily net result — last 14 days</h2>
@@ -2604,17 +2591,13 @@ function Referrals({ referrals, addReferral, updateReferral, removeReferral, fy,
         <div className="register-toolbar">
           <h2 style={{ margin: 0 }}>Referral income — FY {fy} total: {inr(total)}</h2>
           {can("referrals", "write") && <button className="btn" type="button" onClick={openAdd}>+ Add referral</button>}
+          <CustomExport rows={referrals} dateField="date" filenameBase="referral-income" printTitle="Referral Income" canExport={can("referrals", "export")} buildSheets={(rows) => ({ Referrals: rows })} printColumns={[{ label: "Date", value: (r) => r.date }, { label: "Patient", value: (r) => r.patientName }, { label: "Type", value: (r) => r.referralType }, { label: "Referred To", value: (r) => r.referredTo }, { label: "Amount", value: (r) => inr(r.amount) }]} />
         </div>
         {referrals.length === 0 ? <div className="empty">No referrals recorded yet.</div> : (
           <table><thead><tr><th>Date</th><th>Patient</th><th>Type</th><th>Referred To</th><th className="num">Amount</th><th>Notes</th><th></th></tr></thead>
             <tbody>{[...referrals].sort((a, b) => (a.date < b.date ? 1 : -1)).map((r) => (<tr key={r.id}><td>{r.date}</td><td>{r.patientName}</td><td>{r.referralType}</td><td>{r.referredTo}</td><td className="num">{inr(r.amount)}</td><td>{r.notes}</td><td style={{ display: "flex", gap: 6 }}>{can("referrals", "edit") && <button className="btn secondary small" type="button" onClick={() => startEdit(r)}>Edit</button>}{can("referrals", "delete") && <button className="btn danger small" type="button" onClick={() => remove(r.id)}>Delete</button>}</td></tr>))}</tbody>
           </table>
         )}
-        <CustomExport
-          rows={referrals} dateField="date" filenameBase="referral-income" printTitle="Referral Income" canExport={can("referrals", "export")}
-          buildSheets={(rows) => ({ Referrals: rows })}
-          printColumns={[{ label: "Date", value: (r) => r.date }, { label: "Patient", value: (r) => r.patientName }, { label: "Type", value: (r) => r.referralType }, { label: "Referred To", value: (r) => r.referredTo }, { label: "Amount", value: (r) => inr(r.amount) }]}
-        />
       </div>
     </div>
   );
@@ -2663,17 +2646,13 @@ function Gifts({ gifts, addGift, updateGift, removeGift, doctors, can }) {
         <div className="register-toolbar">
           <h2 style={{ margin: 0 }}>Gifts register</h2>
           {can("gifts", "write") && <button className="btn" type="button" onClick={openAdd}>+ Log a gift</button>}
+          <CustomExport rows={gifts} dateField="date" filenameBase="gifts-register" printTitle="Gifts Register" canExport={can("gifts", "export")} buildSheets={(rows) => ({ Gifts: rows.map((g) => ({ Date: g.date, Rep: g.repName, Company: g.company, Gift: g.gift, Doctor: g.doctorName, Amount: g.amount })) })} printColumns={[{ label: "Date", value: (g) => g.date }, { label: "Rep", value: (g) => g.repName }, { label: "Company", value: (g) => g.company }, { label: "Gift", value: (g) => g.gift }, { label: "Doctor", value: (g) => g.doctorName }, { label: "Amount", value: (g) => (g.amount ? inr(g.amount) : "—") }]} />
         </div>
         {gifts.length === 0 ? <div className="empty">No entries yet.</div> : (
           <table><thead><tr><th>Date</th><th>Rep</th><th>Company</th><th>Gift</th><th>Doctor</th><th className="num">Amount</th><th></th></tr></thead>
             <tbody>{[...gifts].sort((a, b) => (a.date < b.date ? 1 : -1)).map((g) => (<tr key={g.id}><td>{g.date}</td><td>{g.repName}</td><td>{g.company}</td><td>{g.gift}</td><td>{g.doctorName || "—"}</td><td className="num">{g.amount ? inr(g.amount) : "—"}</td><td style={{ display: "flex", gap: 6 }}>{can("gifts", "edit") && <button className="btn secondary small" type="button" onClick={() => startEdit(g)}>Edit</button>}{can("gifts", "delete") && <button className="btn danger small" type="button" onClick={() => remove(g.id)}>Delete</button>}</td></tr>))}</tbody>
           </table>
         )}
-        <CustomExport
-          rows={gifts} dateField="date" filenameBase="gifts-register" printTitle="Gifts Register" canExport={can("gifts", "export")}
-          buildSheets={(rows) => ({ Gifts: rows.map((g) => ({ Date: g.date, Rep: g.repName, Company: g.company, Gift: g.gift, Doctor: g.doctorName, Amount: g.amount })) })}
-          printColumns={[{ label: "Date", value: (g) => g.date }, { label: "Rep", value: (g) => g.repName }, { label: "Company", value: (g) => g.company }, { label: "Gift", value: (g) => g.gift }, { label: "Doctor", value: (g) => g.doctorName }, { label: "Amount", value: (g) => (g.amount ? inr(g.amount) : "—") }]}
-        />
       </div>
     </div>
   );
@@ -2733,6 +2712,7 @@ function Expenses({ expenses, addExpense, updateExpense, removeExpense, fy, pend
         <div className="register-toolbar">
           <h2 style={{ margin: 0 }}>All expense entries ({filteredExpenses.length}{registerQuery.trim() ? ` of ${expenses.length}` : ""})</h2>
           {can("expenses", "write") && <button className="btn" type="button" onClick={openAdd}>+ Add expense</button>}
+          <CustomExport rows={filteredExpenses} dateField="date" filenameBase="expenses" printTitle="Expenses" canExport={can("expenses", "export")} buildSheets={(rows) => ({ Expenses: rows, CategoryTotals: EXPENSE_CATEGORIES.map((c) => ({ Category: c, Amount: rows.filter((r) => r.category === c).reduce((s, r) => s + r.amount, 0) })) })} printColumns={[{ label: "Date", value: (e) => e.date }, { label: "Category", value: (e) => e.category }, { label: "Narration", value: (e) => e.narration }, { label: "Amount", value: (e) => inr(e.amount) }]} />
         </div>
         <input type="text" value={registerQuery} onChange={(e) => setRegisterQuery(e.target.value)} placeholder="Search by narration or category" style={{ width: "100%", maxWidth: 360, marginBottom: 12 }} />
         {filteredExpenses.length === 0 ? <div className="empty">{registerQuery.trim() ? "No expenses match that search." : "No expenses logged yet."}</div> : (
@@ -2740,11 +2720,6 @@ function Expenses({ expenses, addExpense, updateExpense, removeExpense, fy, pend
             <tbody>{[...filteredExpenses].sort((a, b) => (a.date < b.date ? 1 : -1)).map((e) => (<tr key={e.id}><td>{e.date}</td><td>{e.category}</td><td>{e.narration}</td><td className="num">{inr(e.amount)}</td><td>{e.image ? "📎" : "—"}</td><td style={{ display: "flex", gap: 6 }}>{can("expenses", "edit") && <button className="btn secondary small" type="button" onClick={() => startEdit(e)}>Edit</button>}{can("expenses", "delete") && <button className="btn danger small" type="button" onClick={() => remove(e.id)}>Delete</button>}</td></tr>))}</tbody>
           </table>
         )}
-        <CustomExport
-          rows={filteredExpenses} dateField="date" filenameBase="expenses" printTitle="Expenses" canExport={can("expenses", "export")}
-          buildSheets={(rows) => ({ Expenses: rows, CategoryTotals: EXPENSE_CATEGORIES.map((c) => ({ Category: c, Amount: rows.filter((r) => r.category === c).reduce((s, r) => s + r.amount, 0) })) })}
-          printColumns={[{ label: "Date", value: (e) => e.date }, { label: "Category", value: (e) => e.category }, { label: "Narration", value: (e) => e.narration }, { label: "Amount", value: (e) => inr(e.amount) }]}
-        />
       </div>
     </div>
   );
@@ -2797,6 +2772,7 @@ function FixedAssets({ assets, addAsset, updateAsset, removeAsset, fy, can }) {
         <div className="register-toolbar">
           <h2 style={{ margin: 0 }}>Depreciation register — FY {fy}</h2>
           {can("assets", "write") && <button className="btn" type="button" onClick={openAdd}>+ Add asset</button>}
+          <CustomExport rows={dep.rows} dateField="purchaseDate" filenameBase="fixed-assets" printTitle="Fixed Assets — Depreciation Register" canExport={can("assets", "export")} buildSheets={(rows) => ({ DepreciationFY: rows.map((r) => ({ Asset: r.name, Block: r.block, Rate: r.rate, Cost: r.cost, OpeningWDV: r.applicable ? r.wdvStart : 0, Depreciation: r.applicable ? r.dep : 0, ClosingWDV: r.applicable ? r.wdvEnd : 0 })) })} printColumns={[{ label: "Asset", value: (r) => r.name }, { label: "Block", value: (r) => r.block }, { label: "Cost", value: (r) => inr(r.cost) }, { label: "Depreciation", value: (r) => (r.applicable ? inr(r.dep) : "—") }, { label: "Closing WDV", value: (r) => (r.applicable ? inr(r.wdvEnd) : "—") }]} />
         </div>
         {dep.rows.length === 0 ? <div className="empty">No fixed assets on the register yet.</div> : (
           <table>
@@ -2809,11 +2785,6 @@ function FixedAssets({ assets, addAsset, updateAsset, removeAsset, fy, can }) {
             <tfoot><tr style={{ fontWeight: 700 }}><td colSpan={5}>Total depreciation for FY {fy}</td><td className="num">{inr(dep.totalDep)}</td><td colSpan={2}></td></tr></tfoot>
           </table>
         )}
-        <CustomExport
-          rows={dep.rows} dateField="purchaseDate" filenameBase="fixed-assets" printTitle="Fixed Assets — Depreciation Register" canExport={can("assets", "export")}
-          buildSheets={(rows) => ({ DepreciationFY: rows.map((r) => ({ Asset: r.name, Block: r.block, Rate: r.rate, Cost: r.cost, OpeningWDV: r.applicable ? r.wdvStart : 0, Depreciation: r.applicable ? r.dep : 0, ClosingWDV: r.applicable ? r.wdvEnd : 0 })) })}
-          printColumns={[{ label: "Asset", value: (r) => r.name }, { label: "Block", value: (r) => r.block }, { label: "Cost", value: (r) => inr(r.cost) }, { label: "Depreciation", value: (r) => (r.applicable ? inr(r.dep) : "—") }, { label: "Closing WDV", value: (r) => (r.applicable ? inr(r.wdvEnd) : "—") }]}
-        />
         <div className="note-box">Depreciation follows the Section 32 written-down-value method (half rate if used under 180 days in the year of purchase), computed server-side so every screen agrees with the ledger.</div>
       </div>
     </div>
@@ -2879,7 +2850,15 @@ function FinancialStatements({ fy, settings, can }) {
   return (
     <div>
       <div className="card">
-        <h2>{settings.clinicName} — Income Statement, FY {fy}</h2>
+        <div className="register-toolbar">
+          <h2 style={{ margin: 0 }}>{settings.clinicName} — Income Statement, FY {fy}</h2>
+          {can("statements", "export") && (
+            <div className="report-actions no-print">
+              <ExportRow onExcel={() => exportExcel("income-statement", { Income: [{ Head: "Patient Collection Income", Amount: income.income.patientCollection }, { Head: "Referral Income", Amount: income.income.referral }, { Head: "Gift Income", Amount: income.income.gift }], Expenses: income.expenses.map((r) => ({ Head: r.name, Amount: r.amount })), Summary: [{ TotalIncome: income.income.total, TotalExpense: income.totalExpense, NetProfit: income.netProfit }] })} />
+              <button className="btn secondary small" type="button" onClick={() => setCustomOpen((o) => !o)}>📅 Custom range</button>
+            </div>
+          )}
+        </div>
         <p style={{ fontSize: 12.5, color: "var(--ink-soft)", marginTop: -6 }}>{settings.proprietor}</p>
         <table><thead><tr><th>Income</th><th className="num">Amount</th></tr></thead>
           <tbody>
@@ -2899,10 +2878,8 @@ function FinancialStatements({ fy, settings, can }) {
         <ResponsiveContainer width="100%" height={180}>
           <BarChart data={chartData} layout="vertical"><XAxis type="number" fontSize={11} /><YAxis type="category" dataKey="name" fontSize={12} width={70} /><Tooltip formatter={(v) => inr(v)} /><Bar dataKey="value" radius={[0, 6, 6, 0]}><Cell fill="#1F8A5F" /><Cell fill="#B3423A" /></Bar></BarChart>
         </ResponsiveContainer>
-        {can("statements", "export") && <ExportRow onExcel={() => exportExcel("income-statement", { Income: [{ Head: "Patient Collection Income", Amount: income.income.patientCollection }, { Head: "Referral Income", Amount: income.income.referral }, { Head: "Gift Income", Amount: income.income.gift }], Expenses: income.expenses.map((r) => ({ Head: r.name, Amount: r.amount })), Summary: [{ TotalIncome: income.income.total, TotalExpense: income.totalExpense, NetProfit: income.netProfit }] })} />}
         {can("statements", "export") && (
           <div className="custom-export no-print">
-            <button className="btn secondary small" type="button" onClick={() => setCustomOpen((o) => !o)}>📅 Custom range income statement</button>
             {customOpen && (
               <div className="custom-export-panel">
                 <div><label>From</label><input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} /></div>
@@ -2920,17 +2897,22 @@ function FinancialStatements({ fy, settings, can }) {
         )}
       </div>
       <div className="card">
-        <h2>Capital Account — as of {capAcct.asOf}</h2>
+        <div className="register-toolbar">
+          <h2 style={{ margin: 0 }}>Capital Account — as of {capAcct.asOf}</h2>
+          {can("statements", "export") && <ExportRow onExcel={() => exportExcel("capital-account", { CapitalAccount: [{ CapitalIntroduced: capAcct.capIntroduced, Drawings: capAcct.drawings, CumulativeNetProfit: capAcct.cumulativeNetProfit, ClosingCapital: capAcct.closingCapital }] })} />}
+        </div>
         <table><tbody>
           <tr><td>Capital introduced (cumulative)</td><td className="num">{inr(capAcct.capIntroduced)}</td></tr>
           <tr><td>Less: Drawings (cumulative)</td><td className="num">-{inr(capAcct.drawings)}</td></tr>
           <tr><td>Add: Cumulative net profit (all periods to date)</td><td className="num">{inr(capAcct.cumulativeNetProfit)}</td></tr>
           <tr style={{ fontWeight: 700, borderTop: "2px solid var(--accent)" }}><td>Closing Capital — {settings.proprietor}</td><td className="num">{inr(capAcct.closingCapital)}</td></tr>
         </tbody></table>
-        {can("statements", "export") && <ExportRow onExcel={() => exportExcel("capital-account", { CapitalAccount: [{ CapitalIntroduced: capAcct.capIntroduced, Drawings: capAcct.drawings, CumulativeNetProfit: capAcct.cumulativeNetProfit, ClosingCapital: capAcct.closingCapital }] })} />}
       </div>
       <div className="card">
-        <h2>Balance Sheet — as of {bs.asOf}</h2>
+        <div className="register-toolbar">
+          <h2 style={{ margin: 0 }}>Balance Sheet — as of {bs.asOf}</h2>
+          {can("statements", "export") && <ExportRow onExcel={() => exportExcel("balance-sheet", { BalanceSheet: [{ UnsecuredLoans: bs.liabilities.unsecuredLoan, Capital: bs.capital.closingCapital, CashBank: bs.assets.cashBank, Debtors: bs.assets.debtors, SecurityDeposits: bs.assets.securityDeposit, FixedAssetsNet: bs.assets.fixedAssetsNet, TotalAssets: bs.assets.total }] })} />}
+        </div>
         <table><thead><tr><th>Liabilities & Capital</th><th className="num">Amount</th><th>Assets</th><th className="num">Amount</th></tr></thead>
           <tbody>
             <tr><td>Unsecured Loans</td><td className="num">{inr(bs.liabilities.unsecuredLoan)}</td><td>Cash & Bank</td><td className="num">{inr(bs.assets.cashBank)}</td></tr>
@@ -2941,7 +2923,6 @@ function FinancialStatements({ fy, settings, can }) {
           </tbody>
         </table>
         <div style={{ marginTop: 10 }}><span className={"balance-tag " + (bs.ties ? "ok" : "bad")}>{bs.ties ? "Balance sheet ties out" : `Off by ${inr(Math.abs(bs.liabilities.unsecuredLoan + bs.capital.closingCapital - bs.assets.total))}`}</span></div>
-        {can("statements", "export") && <ExportRow onExcel={() => exportExcel("balance-sheet", { BalanceSheet: [{ UnsecuredLoans: bs.liabilities.unsecuredLoan, Capital: bs.capital.closingCapital, CashBank: bs.assets.cashBank, Debtors: bs.assets.debtors, SecurityDeposits: bs.assets.securityDeposit, FixedAssetsNet: bs.assets.fixedAssetsNet, TotalAssets: bs.assets.total }] })} />}
         <div className="note-box">Model assumes the clinic settles expenses directly out of collections (no supplier credit tracked), so Liabilities + Capital equal Assets by construction. Add a Sundry Creditors flow if medicine purchases start going on credit.</div>
       </div>
     </div>
@@ -2972,7 +2953,10 @@ function AccessReport({ can }) {
   return (
     <div>
       <div className="card">
-        <h2>User Access Report</h2>
+        <div className="register-toolbar">
+          <h2 style={{ margin: 0 }}>User Access Report</h2>
+          <CustomExport rows={exportRows} dateField="date" filenameBase="user-access-report" printTitle="User Access Report" canExport={can("auditLog", "export")} buildSheets={(data) => ({ AccessLog: data.map((r) => ({ DateTime: stamp(r), User: r.user_label, Module: moduleLabel(r.module), Action: r.action })) })} printColumns={[{ label: "Date & Time", value: (r) => stamp(r) }, { label: "User", value: (r) => r.user_label }, { label: "Module", value: (r) => moduleLabel(r.module) }, { label: "Action", value: (r) => r.action }]} />
+        </div>
         <p style={{ fontSize: 12.5, color: "var(--ink-soft)", marginTop: -8 }}>Who accessed which module, and when — logged automatically as staff use the app.</p>
         <div className="form-grid" style={{ maxWidth: 340 }}>
           <div><label>From</label><input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></div>
@@ -2986,11 +2970,6 @@ function AccessReport({ can }) {
             <tbody>{rows.map((r) => (<tr key={r.id}><td>{stamp(r)}</td><td>{r.user_label}</td><td>{moduleLabel(r.module)}</td><td style={{ textTransform: "capitalize" }}>{r.action}</td></tr>))}</tbody>
           </table>
         )}
-        <CustomExport
-          rows={exportRows} dateField="date" filenameBase="user-access-report" printTitle="User Access Report" canExport={can("auditLog", "export")}
-          buildSheets={(data) => ({ AccessLog: data.map((r) => ({ DateTime: stamp(r), User: r.user_label, Module: moduleLabel(r.module), Action: r.action })) })}
-          printColumns={[{ label: "Date & Time", value: (r) => stamp(r) }, { label: "User", value: (r) => r.user_label }, { label: "Module", value: (r) => moduleLabel(r.module) }, { label: "Action", value: (r) => r.action }]}
-        />
       </div>
     </div>
   );
