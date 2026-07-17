@@ -478,7 +478,7 @@ function AuthScreen({ onLogin, origin, setOrigin }) {
       if (mode === "login") {
         const data = await localCall("/auth/login", { method: "POST", body: { userId, password } });
         await storeSet("clinic:apiOrigin", origin);
-        onLogin({ token: data.token, userId: data.user.userId, name: data.user.name, role: data.user.role, permissions: data.user.permissions });
+        onLogin({ token: data.token, userId: data.user.userId, name: data.user.name, role: data.user.role, permissions: data.user.permissions, avatarUrl: data.user.avatarUrl || null });
       } else {
         const data = await localCall("/auth/register", { method: "POST", body: { userId, password, name: name || userId, email: email || undefined, mobile: mobile || undefined } });
         if (data.requiresOtp) {
@@ -501,7 +501,7 @@ function AuthScreen({ onLogin, origin, setOrigin }) {
     try {
       const data = await localCall("/auth/verify-admin-otp", { method: "POST", body: { userId, code: otpCode.trim() } });
       await storeSet("clinic:apiOrigin", origin);
-      onLogin({ token: data.token, userId: data.user.userId, name: data.user.name, role: data.user.role, permissions: data.user.permissions });
+      onLogin({ token: data.token, userId: data.user.userId, name: data.user.name, role: data.user.role, permissions: data.user.permissions, avatarUrl: data.user.avatarUrl || null });
     } catch (e) { setError(e.message); }
     setBusy(false);
   };
