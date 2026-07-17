@@ -801,7 +801,10 @@ export default function App() {
   const updateCase = useCallback(async (id, body) => {
     const r = await call(`/cases/${id}`, { method: "PUT", body });
     const doc = doctors.find((d) => d.id === body.doctorId);
-    setCases((p) => p.map((x) => (x.id === id ? { ...mapCase(r), doctorName: doc?.name } : x)));
+    // The backend's PUT response doesn't include the medicines list (only GET does) —
+    // use what we just submitted, since that's exactly what was saved, rather than
+    // letting mapCase() silently default to an empty array and wipe it on screen.
+    setCases((p) => p.map((x) => (x.id === id ? { ...mapCase(r), doctorName: doc?.name, medicines: body.medicines || [] } : x)));
     setCollections((p) => p.map((c) => (c.caseId === id ? { ...c, patientName: body.patientName, phone: body.phone, caseNo: r.case_no } : c)));
   }, [call, doctors]);
   const removeCase = useCallback(async (id) => { await call(`/cases/${id}`, { method: "DELETE" }); setCases((p) => p.filter((x) => x.id !== id)); }, [call]);
@@ -1544,7 +1547,7 @@ function Dashboard({ settings, collections, referrals, expenses, doctorPays, cas
   const caseById = useMemo(() => Object.fromEntries(cases.map((c) => [c.id, c])), [cases]);
   const enrichCollection = (c) => { const linked = c.caseId ? caseById[c.caseId] : null; return { ...c, shift: linked?.shift || "", doctorName: linked?.doctorName || "" }; };
 
-  const openDrill = ({ kind, mode, start, end, label }) => {
+  const openDrill = ({ kind, mode, doctorName, start, end, label }) => {
     const inRange = (d) => (!start || d >= start) && (!end || d <= end);
     if (kind === "expenses") {
       setDrill({ title: `Expenses — ${label}`, kind: "expenses", rows: expenses.filter((e) => inRange(e.date)) });
@@ -1554,6 +1557,7 @@ function Dashboard({ settings, collections, referrals, expenses, doctorPays, cas
     let title = `All Collections — ${label}`;
     if (kind === "mode") { rows = rows.filter((c) => (c.mode || "Other") === mode); title = `${mode} Collections — ${label}`; }
     else if (kind === "outstanding") { rows = rows.filter((c) => Number(c.balance || 0) > 0); title = `Outstanding Due — ${label}`; }
+    else if (kind === "doctor") { rows = rows.filter((c) => (c.doctorName || "Unassigned") === doctorName); title = `${doctorName} — ${label}`; }
     setDrill({ title, kind: "collections", rows });
   };
 
@@ -1678,7 +1682,7 @@ function Dashboard({ settings, collections, referrals, expenses, doctorPays, cas
         {doctorRevenue.length === 0 ? <div className="empty">No collections linked to a doctor yet this financial year.</div> : (
           <table>
             <thead><tr><th>Doctor</th><th className="num">Billed revenue</th></tr></thead>
-            <tbody>{doctorRevenue.map(([name, amt]) => (<tr key={name}><td>{name}</td><td className="num">{inr(amt)}</td></tr>))}</tbody>
+            <tbody>{doctorRevenue.map(([name, amt]) => (<tr key={name} style={{ cursor: "pointer" }} onClick={() => openDrill({ kind: "doctor", doctorName: name, start: range.start, end: range.end, label: `FY ${fy}` })}><td style={{ textDecoration: "underline", textDecorationStyle: "dotted", textDecorationColor: "var(--ink-soft)" }}>{name}</td><td className="num">{inr(amt)}</td></tr>))}</tbody>
           </table>
         )}
         <div className="note-box">Based on Amount Due for collections linked to a case (shift/doctor comes from the linked case record) — "Unassigned" means the collection isn't linked to a case, or the case has no doctor selected.</div>
