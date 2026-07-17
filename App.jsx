@@ -879,10 +879,10 @@ export default function App() {
           .app-root{--primary:#714B67;--primary-dark:#4A2F44;--accent:#C9A227;--accent-soft:#F3E3A8;--bg:#F5F8F7;--surface:#FFFFFF;
             --ink:#142524;--ink-soft:#5B6B69;--border:#E1E8E6;--income:#1F8A5F;--expense:#B3423A;
             min-height:100vh;background:var(--bg);font-family:'Inter',sans-serif;color:var(--ink);display:flex;}
-          .sidebar{width:230px;background:linear-gradient(180deg,var(--primary),var(--primary-dark));color:#EAF3F1;flex-shrink:0;padding:22px 0;display:flex;flex-direction:column;}
-          .sidebar .brand{font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;font-size:20px;padding:0 20px 2px;}
-          .sidebar .biz{padding:0 20px 16px;font-size:11.5px;color:#B9D8D2;border-bottom:1px solid rgba(255,255,255,.15);margin-bottom:8px;line-height:1.5;word-break:break-all;}
-          .nav-item{text-align:left;background:none;border:none;color:#EAF3F1;padding:10px 20px;font-size:13.5px;font-weight:500;cursor:pointer;border-left:3px solid transparent;opacity:.82;display:flex;align-items:center;gap:10px;}
+          .sidebar{width:230px;background:var(--surface);border-right:1px solid var(--border);color:var(--ink);flex-shrink:0;padding:22px 0;display:flex;flex-direction:column;}
+          .sidebar .brand{font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;font-size:20px;padding:0 20px 2px;color:var(--primary-dark);}
+          .sidebar .biz{padding:0 20px 16px;font-size:11.5px;color:var(--ink-soft);border-bottom:1px solid var(--border);margin-bottom:8px;line-height:1.5;word-break:break-all;}
+          .nav-item{text-align:left;background:none;border:none;color:var(--ink-soft);padding:10px 20px;font-size:13.5px;font-weight:500;cursor:pointer;border-left:3px solid transparent;opacity:1;display:flex;align-items:center;gap:10px;transition:background .12s ease,color .12s ease;}
           .nav-icon{font-size:15px;line-height:1;width:18px;text-align:center;flex-shrink:0;}
           .nav-icon-chip{font-size:13px;line-height:1;width:26px;height:26px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;
             position:relative;overflow:hidden;isolation:isolate;
@@ -892,9 +892,10 @@ export default function App() {
             transform:translateX(-140%);}
           .nav-item:hover .nav-icon-chip::before{transform:translateX(140%);transition:transform .55s ease;}
           .nav-icon-chip span{position:relative;z-index:2;}
-          .nav-item.active{background:rgba(0,0,0,.22);border-left-color:var(--accent);opacity:1;font-weight:700;}
-          .nav-item:hover{opacity:1;}
-          .logout{margin-top:auto;padding:12px 20px;font-size:12px;color:#E9CFCF;background:none;border:none;text-align:left;cursor:pointer;text-decoration:underline;}
+          .nav-item.active{background:rgba(113,75,103,.09);border-left-color:var(--primary);color:var(--primary-dark);font-weight:700;}
+          .nav-item:hover{background:var(--bg);color:var(--ink);}
+          .logout{margin-top:auto;padding:12px 20px;font-size:12px;color:var(--expense);background:none;border:none;text-align:left;cursor:pointer;text-decoration:underline;opacity:.85;}
+          .logout:hover{opacity:1;}
           .main{flex:1;min-width:0;}
           .topbar{background:var(--surface);border-bottom:2px solid var(--accent);padding:14px 26px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;}
           .topbar-right{display:flex;align-items:center;gap:12px;}
@@ -911,7 +912,7 @@ export default function App() {
           .grid-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:20px;}
           .launcher-wrap{background:linear-gradient(160deg,#EFEBFA 0%,#F6F3FC 45%,#FDFBFF 100%);border-radius:16px;padding:36px 28px;min-height:calc(100vh - 100px);}
           .launcher-header{margin-bottom:0;}
-          .launcher-header-row{display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:20px;margin-bottom:28px;}
+          .launcher-header-row{display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:20px;margin-bottom:14px;}
           .upload-calendar{background:#fff;border:1px solid #EAE6F5;border-radius:14px;padding:14px 16px;box-shadow:0 2px 8px rgba(80,60,120,.07);min-width:280px;max-width:420px;}
           .upload-calendar-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px;}
           .upload-calendar-title{font-size:12.5px;font-weight:800;color:var(--primary-dark);}
@@ -931,8 +932,10 @@ export default function App() {
           .upload-calendar-month{margin-left:auto;font-weight:700;color:var(--ink);}
           .launcher-header h2{font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;font-size:26px;color:var(--primary-dark);margin:0 0 6px;}
           .launcher-header p{color:var(--ink-soft);font-size:14px;margin:0;}
-          .launcher-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:18px;}
-          .launcher-tile{display:flex;flex-direction:column;align-items:center;gap:10px;background:#fff;border:1px solid #EAE6F5;border-radius:14px;padding:20px 10px;cursor:pointer;transition:transform .12s ease,box-shadow .12s ease;box-shadow:0 2px 6px rgba(80,60,120,.06);}
+          .launcher-grid{display:flex;flex-wrap:nowrap;overflow-x:auto;gap:16px;padding-bottom:8px;scrollbar-width:thin;}
+          .launcher-grid::-webkit-scrollbar{height:6px;}
+          .launcher-grid::-webkit-scrollbar-thumb{background:#D9D2EC;border-radius:6px;}
+          .launcher-tile{flex:0 0 118px;display:flex;flex-direction:column;align-items:center;gap:10px;background:#fff;border:1px solid #EAE6F5;border-radius:14px;padding:20px 10px;cursor:pointer;transition:transform .12s ease,box-shadow .12s ease;box-shadow:0 2px 6px rgba(80,60,120,.06);}
           .launcher-tile:hover{transform:translateY(-3px);box-shadow:0 8px 20px rgba(80,60,120,.14);}
           .launcher-icon{width:52px;height:52px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:24px;
             position:relative;overflow:hidden;isolation:isolate;
@@ -990,7 +993,7 @@ export default function App() {
           .activity-table td.num{text-align:right;}
           .activity-table tbody tr{cursor:pointer;}
           .activity-table tbody tr:hover td{color:var(--primary);}
-          @media(max-width:640px){ .launcher-grid{grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:12px;} .launcher-wrap{padding:22px 14px;} }
+          @media(max-width:640px){ .launcher-tile{flex-basis:96px;} .launcher-wrap{padding:22px 14px;} }
           .period-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-bottom:18px;}
           .week-picker{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:-4px 0 10px;}
           .week-picker input[type="month"],.week-picker select{font-size:11.5px;padding:4px 6px;border-radius:6px;border:1px solid var(--border);background:#fff;color:var(--ink);}
@@ -1494,18 +1497,9 @@ function LauncherGrid({ settings, session, can, setView, setPendingSearch, cases
   const recentExpenses = can("expenses", "view") ? byCreatedDesc(expenses) : [];
   const hasRecentActivity = recentPatients.length + recentCollections.length + recentExpenses.length > 0;
 
-  // ---- 3. Role-based personalization ----
-  const [pendingApprovals, setPendingApprovals] = useState(null);
-  useEffect(() => {
-    if (session.role !== "Admin") return;
-    call("/admin/users").then((users) => setPendingApprovals((users || []).filter((u) => u.status === "pending_approval").length)).catch(() => setPendingApprovals(null));
-  }, [session.role, call]);
-
   const pendingCaseBookings = cases.filter((c) => !collections.some((col) => col.caseId === c.id && (col.mode || Number(col.amountDue) > 0))).length;
   const todayCasesCount = cases.filter((c) => c.date === t).length;
   const todayCollectedTotal = collections.filter((c) => c.date === t).reduce((s, c) => s + Number(c.amountCollected || 0), 0);
-  const weekExpenseTotal = expenses.filter((e) => e.date >= weekStart && e.date <= t).reduce((s, e) => s + Number(e.amount || 0), 0);
-  const weekCollectedTotal = collections.filter((c) => c.date >= weekStart && c.date <= t).reduce((s, c) => s + Number(c.amountCollected || 0), 0);
 
   // Doctor-role home panel: scoped to the logged-in doctor's own cases/collections
   // when their account is linked to a doctor-roster entry; otherwise falls back
@@ -1580,16 +1574,6 @@ function LauncherGrid({ settings, session, can, setView, setPendingSearch, cases
             <div className="role-stat" onClick={() => setView("collections")}><span className="role-stat-value">{myPendingCaseBookings}</span><span className="role-stat-label">Case records pending billing</span></div>
           </div>
           {!myDoctorId && <p style={{ fontSize: 12, color: "var(--ink-soft)", marginTop: 8, marginBottom: 0 }}>Showing clinic-wide numbers — ask an Admin to link your account to your doctor profile under User Approvals for your own numbers here.</p>}
-        </div>
-      )}
-      {session.role === "Admin" && (
-        <div className="role-panel no-print">
-          <div className="role-panel-label">Admin overview</div>
-          <div className="role-panel-stats">
-            <div className="role-stat" onClick={() => setView("admin")}><span className="role-stat-value">{pendingApprovals === null ? "…" : pendingApprovals}</span><span className="role-stat-label">Pending approvals</span></div>
-            <div className="role-stat" onClick={() => setView("expenses")}><span className="role-stat-value">{inr(weekExpenseTotal)}</span><span className="role-stat-label">Expenses this week</span></div>
-            <div className="role-stat" onClick={() => setView("dashboard")}><span className="role-stat-value">{inr(weekCollectedTotal - weekExpenseTotal)}</span><span className="role-stat-label">Net this week</span></div>
-          </div>
         </div>
       )}
 
