@@ -1485,19 +1485,19 @@ function LauncherGrid({ settings, session, can, setView, setPendingSearch, cases
             {recentPatients.length > 0 && (
               <div className="activity-col">
                 <div className="activity-col-title">🧑‍🤝‍🧑 Last patients added</div>
-                {recentPatients.map((p) => (<div key={p.id} className="activity-row" onClick={() => setView("patientMaster")}><span>{p.name}</span><span className="activity-when">{p.mobile || "—"}</span></div>))}
+                {recentPatients.map((p) => (<div key={p.id} className="activity-row" onClick={() => setView("patientMaster")}><span>{p.name}</span><span className="activity-when">{p.mobile || "—"}{p.createdAt ? ` · ${formatDate(d10(p.createdAt))}` : ""}</span></div>))}
               </div>
             )}
             {recentCollections.length > 0 && (
               <div className="activity-col">
                 <div className="activity-col-title">💰 Last collections</div>
-                {recentCollections.map((c) => (<div key={c.id} className="activity-row" onClick={() => setView("collections")}><span>{c.patientName}</span><span className="activity-when">{inr(c.amountCollected)}</span></div>))}
+                {recentCollections.map((c) => (<div key={c.id} className="activity-row" onClick={() => setView("collections")}><span>{c.patientName}</span><span className="activity-when">{formatDate(c.date)} · {inr(c.amountCollected)}</span></div>))}
               </div>
             )}
             {recentExpenses.length > 0 && (
               <div className="activity-col">
                 <div className="activity-col-title">🧾 Last expenses</div>
-                {recentExpenses.map((e) => (<div key={e.id} className="activity-row" onClick={() => setView("expenses")}><span>{e.category}</span><span className="activity-when">{inr(e.amount)}</span></div>))}
+                {recentExpenses.map((e) => (<div key={e.id} className="activity-row" onClick={() => setView("expenses")}><span>{e.category}</span><span className="activity-when">{formatDate(e.date)} · {inr(e.amount)}</span></div>))}
               </div>
             )}
           </div>
