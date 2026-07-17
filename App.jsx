@@ -738,7 +738,6 @@ const GROUP_COLORS = {
   admin: ["#8A97A8", "#5B6B78"], // grey
   overview: ["#F4A340", "#E85D3D"], // orange — Dashboard sits outside the four groups
 };
-const GROUP_LABELS = { clinical: "Clinical Records", finance: "Finance", operations: "Operations", admin: "Admin" };
 
 const NAV = [
   { key: "dashboard", label: "Dashboard", icon: "🏠", group: "overview", desc: "Live KPIs, daily/weekly/monthly snapshots, and trend charts." },
@@ -879,10 +878,10 @@ export default function App() {
           .app-root{--primary:#714B67;--primary-dark:#4A2F44;--accent:#C9A227;--accent-soft:#F3E3A8;--bg:#F5F8F7;--surface:#FFFFFF;
             --ink:#142524;--ink-soft:#5B6B69;--border:#E1E8E6;--income:#1F8A5F;--expense:#B3423A;
             min-height:100vh;background:var(--bg);font-family:'Inter',sans-serif;color:var(--ink);display:flex;}
-          .sidebar{width:230px;background:var(--surface);border-right:1px solid var(--border);color:var(--ink);flex-shrink:0;padding:22px 0;display:flex;flex-direction:column;}
-          .sidebar .brand{font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;font-size:20px;padding:0 20px 2px;color:var(--primary-dark);}
-          .sidebar .biz{padding:0 20px 16px;font-size:11.5px;color:var(--ink-soft);border-bottom:1px solid var(--border);margin-bottom:8px;line-height:1.5;word-break:break-all;}
-          .nav-item{text-align:left;background:none;border:none;color:var(--ink-soft);padding:10px 20px;font-size:13.5px;font-weight:500;cursor:pointer;border-left:3px solid transparent;opacity:1;display:flex;align-items:center;gap:10px;transition:background .12s ease,color .12s ease;}
+          .sidebar{width:230px;background:linear-gradient(180deg,var(--primary),var(--primary-dark));color:#EAF3F1;flex-shrink:0;padding:22px 0;display:flex;flex-direction:column;}
+          .sidebar .brand{font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;font-size:20px;padding:0 20px 2px;}
+          .sidebar .biz{padding:0 20px 16px;font-size:11.5px;color:#B9D8D2;border-bottom:1px solid rgba(255,255,255,.15);margin-bottom:8px;line-height:1.5;word-break:break-all;}
+          .nav-item{text-align:left;background:none;border:none;color:#EAF3F1;padding:10px 20px;font-size:13.5px;font-weight:500;cursor:pointer;border-left:3px solid transparent;opacity:.82;display:flex;align-items:center;gap:10px;}
           .nav-icon{font-size:15px;line-height:1;width:18px;text-align:center;flex-shrink:0;}
           .nav-icon-chip{font-size:13px;line-height:1;width:26px;height:26px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;
             position:relative;overflow:hidden;isolation:isolate;
@@ -892,10 +891,9 @@ export default function App() {
             transform:translateX(-140%);}
           .nav-item:hover .nav-icon-chip::before{transform:translateX(140%);transition:transform .55s ease;}
           .nav-icon-chip span{position:relative;z-index:2;}
-          .nav-item.active{background:rgba(113,75,103,.09);border-left-color:var(--primary);color:var(--primary-dark);font-weight:700;}
-          .nav-item:hover{background:var(--bg);color:var(--ink);}
-          .logout{margin-top:auto;padding:12px 20px;font-size:12px;color:var(--expense);background:none;border:none;text-align:left;cursor:pointer;text-decoration:underline;opacity:.85;}
-          .logout:hover{opacity:1;}
+          .nav-item.active{background:rgba(0,0,0,.22);border-left-color:var(--accent);opacity:1;font-weight:700;}
+          .nav-item:hover{opacity:1;}
+          .logout{margin-top:auto;padding:12px 20px;font-size:12px;color:#E9CFCF;background:none;border:none;text-align:left;cursor:pointer;text-decoration:underline;}
           .main{flex:1;min-width:0;}
           .topbar{background:var(--surface);border-bottom:2px solid var(--accent);padding:14px 26px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;}
           .topbar-right{display:flex;align-items:center;gap:12px;}
@@ -912,7 +910,7 @@ export default function App() {
           .grid-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:20px;}
           .launcher-wrap{background:linear-gradient(160deg,#EFEBFA 0%,#F6F3FC 45%,#FDFBFF 100%);border-radius:16px;padding:36px 28px;min-height:calc(100vh - 100px);}
           .launcher-header{margin-bottom:0;}
-          .launcher-header-row{display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:20px;margin-bottom:14px;}
+          .launcher-header-row{display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:20px;margin-bottom:26px;}
           .upload-calendar{background:#fff;border:1px solid #EAE6F5;border-radius:14px;padding:14px 16px;box-shadow:0 2px 8px rgba(80,60,120,.07);min-width:280px;max-width:420px;}
           .upload-calendar-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px;}
           .upload-calendar-title{font-size:12.5px;font-weight:800;color:var(--primary-dark);}
@@ -938,6 +936,7 @@ export default function App() {
           .launcher-tile{flex:0 0 118px;display:flex;flex-direction:column;align-items:center;gap:10px;background:#fff;border:1px solid #EAE6F5;border-radius:14px;padding:20px 10px;cursor:pointer;transition:transform .12s ease,box-shadow .12s ease;box-shadow:0 2px 6px rgba(80,60,120,.06);}
           .launcher-tile:hover{transform:translateY(-3px);box-shadow:0 8px 20px rgba(80,60,120,.14);}
           .launcher-icon{width:52px;height:52px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:24px;
+            background:linear-gradient(135deg,var(--primary),var(--primary-dark));
             position:relative;overflow:hidden;isolation:isolate;
             box-shadow:0 4px 12px rgba(0,0,0,.18),inset 0 1px 1px rgba(255,255,255,.65),inset 0 -4px 8px rgba(0,0,0,.16);
             transition:transform .25s cubic-bezier(.34,1.56,.64,1),box-shadow .25s ease;}
@@ -957,7 +956,7 @@ export default function App() {
           .quick-action-row{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:30px;}
           .quick-action-btn{background:#fff;border:1.5px solid var(--primary);color:var(--primary);font-weight:700;font-size:13px;padding:10px 18px;border-radius:10px;cursor:pointer;transition:background .12s ease,color .12s ease;}
           .quick-action-btn:hover{background:var(--primary);color:#fff;}
-          .launcher-search{position:relative;margin-bottom:18px;max-width:520px;}
+          .launcher-search{position:relative;margin-top:14px;margin-bottom:0;max-width:520px;}
           .launcher-search input{width:100%;padding:12px 16px;border-radius:12px;border:1.5px solid #EAE6F5;font-size:14px;background:#fff;box-shadow:0 1px 4px rgba(80,60,120,.06);}
           .launcher-search-results{position:absolute;top:calc(100% + 6px);left:0;right:0;background:#fff;border:1px solid #EAE6F5;border-radius:12px;box-shadow:0 10px 28px rgba(80,60,120,.18);max-height:360px;overflow-y:auto;z-index:20;padding:8px 0;}
           .launcher-search-empty{padding:14px 18px;font-size:13px;color:var(--ink-soft);}
@@ -1433,8 +1432,6 @@ function CaseUploadCalendar({ cases, setView }) {
 function LauncherGrid({ settings, session, can, setView, setPendingSearch, cases, collections, expenses, doctorPays, referrals, gifts, doctors, patientsMaster }) {
   const { call } = useApi();
   const tiles = NAV.filter((n) => !n.adminOnly || session.role === "Admin").filter((n) => !n.module || can(n.module, "view"));
-  const overview = tiles.filter((n) => n.group === "overview");
-  const grouped = ["clinical", "finance", "operations", "admin"].map((g) => ({ group: g, items: tiles.filter((n) => n.group === g) })).filter((g) => g.items.length > 0);
 
   const t = todayISO();
   const weekStart = (() => { const d = new Date(); d.setDate(d.getDate() - 6); return localISO(d); })();
@@ -1464,10 +1461,9 @@ function LauncherGrid({ settings, session, can, setView, setPendingSearch, cases
   ].filter((a) => { const nav = NAV.find((n) => n.key === a.view); return !nav.module || can(nav.module, "write"); });
 
   const Tile = ({ n }) => {
-    const g = GROUP_COLORS[n.group];
     return (
       <button className="launcher-tile" onClick={() => setView(n.key)} title={n.desc}>
-        <span className="launcher-icon" style={{ background: `linear-gradient(135deg, ${g[0]}, ${g[1]})` }}><span>{n.icon}</span></span>
+        <span className="launcher-icon"><span>{n.icon}</span></span>
         <span className="launcher-label">{n.label}</span>
         {microStats[n.key] && <span className="launcher-stat">{microStats[n.key]}</span>}
       </button>
@@ -1520,43 +1516,43 @@ function LauncherGrid({ settings, session, can, setView, setPendingSearch, cases
         <div className="launcher-header">
           <h2>{settings.clinicName || "Ganatra Clinic"}</h2>
           <p>Welcome back, {session.name.split(" ")[0]} — pick where you want to go.</p>
-        </div>
-        {can("cases", "view") && <CaseUploadCalendar cases={cases} setView={setView} />}
-      </div>
 
-      <div className="launcher-search no-print">
-        <input
-          type="text" value={query} placeholder="🔍 Search patients, cases, collections, expenses…"
-          onChange={(e) => { setQuery(e.target.value); setSearchOpen(true); }} onFocus={() => setSearchOpen(true)}
-        />
-        {searchOpen && searchResults && (
-          <div className="launcher-search-results">
-            {totalResults === 0 ? <div className="launcher-search-empty">No matches for "{query}".</div> : (
-              <>
-                {searchResults.patients.length > 0 && (
-                  <div className="search-group"><div className="search-group-label">🧑‍🤝‍🧑 Patients</div>
-                    {searchResults.patients.map((p) => <div key={p.id} className="search-item" onClick={() => { setPendingSearch({ query, id: p.id }); setView("patientMaster"); setSearchOpen(false); }}>{p.name}{p.mobile ? ` — ${p.mobile}` : ""}</div>)}
-                  </div>
+          <div className="launcher-search no-print">
+            <input
+              type="text" value={query} placeholder="🔍 Search patients, cases, collections, expenses…"
+              onChange={(e) => { setQuery(e.target.value); setSearchOpen(true); }} onFocus={() => setSearchOpen(true)}
+            />
+            {searchOpen && searchResults && (
+              <div className="launcher-search-results">
+                {totalResults === 0 ? <div className="launcher-search-empty">No matches for "{query}".</div> : (
+                  <>
+                    {searchResults.patients.length > 0 && (
+                      <div className="search-group"><div className="search-group-label">🧑‍🤝‍🧑 Patients</div>
+                        {searchResults.patients.map((p) => <div key={p.id} className="search-item" onClick={() => { setPendingSearch({ query, id: p.id }); setView("patientMaster"); setSearchOpen(false); }}>{p.name}{p.mobile ? ` — ${p.mobile}` : ""}</div>)}
+                      </div>
+                    )}
+                    {searchResults.cases.length > 0 && (
+                      <div className="search-group"><div className="search-group-label">📋 Case Records</div>
+                        {searchResults.cases.map((c) => <div key={c.id} className="search-item" onClick={() => { setPendingSearch({ query, id: c.id }); setView("cases"); setSearchOpen(false); }}>{c.caseNo} — {c.patientName}</div>)}
+                      </div>
+                    )}
+                    {searchResults.collections.length > 0 && (
+                      <div className="search-group"><div className="search-group-label">💰 Collections</div>
+                        {searchResults.collections.map((c) => <div key={c.id} className="search-item" onClick={() => { setPendingSearch({ query, id: c.id }); setView("collections"); setSearchOpen(false); }}>{c.patientName} — {inr(c.amountCollected)} ({c.date})</div>)}
+                      </div>
+                    )}
+                    {searchResults.expenses.length > 0 && (
+                      <div className="search-group"><div className="search-group-label">🧾 Expenses</div>
+                        {searchResults.expenses.map((e) => <div key={e.id} className="search-item" onClick={() => { setPendingSearch({ query, id: e.id }); setView("expenses"); setSearchOpen(false); }}>{e.category} — {inr(e.amount)} ({e.date})</div>)}
+                      </div>
+                    )}
+                  </>
                 )}
-                {searchResults.cases.length > 0 && (
-                  <div className="search-group"><div className="search-group-label">📋 Case Records</div>
-                    {searchResults.cases.map((c) => <div key={c.id} className="search-item" onClick={() => { setPendingSearch({ query, id: c.id }); setView("cases"); setSearchOpen(false); }}>{c.caseNo} — {c.patientName}</div>)}
-                  </div>
-                )}
-                {searchResults.collections.length > 0 && (
-                  <div className="search-group"><div className="search-group-label">💰 Collections</div>
-                    {searchResults.collections.map((c) => <div key={c.id} className="search-item" onClick={() => { setPendingSearch({ query, id: c.id }); setView("collections"); setSearchOpen(false); }}>{c.patientName} — {inr(c.amountCollected)} ({c.date})</div>)}
-                  </div>
-                )}
-                {searchResults.expenses.length > 0 && (
-                  <div className="search-group"><div className="search-group-label">🧾 Expenses</div>
-                    {searchResults.expenses.map((e) => <div key={e.id} className="search-item" onClick={() => { setPendingSearch({ query, id: e.id }); setView("expenses"); setSearchOpen(false); }}>{e.category} — {inr(e.amount)} ({e.date})</div>)}
-                  </div>
-                )}
-              </>
+              </div>
             )}
           </div>
-        )}
+        </div>
+        {can("cases", "view") && <CaseUploadCalendar cases={cases} setView={setView} />}
       </div>
 
       {quickActions.length > 0 && (
@@ -1577,20 +1573,11 @@ function LauncherGrid({ settings, session, can, setView, setPendingSearch, cases
         </div>
       )}
 
-      {overview.length > 0 && (
+      {tiles.length > 0 && (
         <div className="launcher-grid" style={{ marginBottom: 26 }}>
-          {overview.map((n) => <Tile key={n.key} n={n} />)}
+          {tiles.map((n) => <Tile key={n.key} n={n} />)}
         </div>
       )}
-
-      {grouped.map(({ group, items }) => (
-        <div key={group} className="launcher-section">
-          <div className="launcher-section-label" style={{ color: GROUP_COLORS[group][1] }}>{GROUP_LABELS[group]}</div>
-          <div className="launcher-grid">
-            {items.map((n) => <Tile key={n.key} n={n} />)}
-          </div>
-        </div>
-      ))}
 
       {hasRecentActivity && (
         <div className="launcher-section">
