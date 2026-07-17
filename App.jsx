@@ -61,7 +61,13 @@ function makeCan(session) {
 }
 
 const inr = (n) => "₹" + (Number(n) || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 });
-const todayISO = () => new Date().toISOString().slice(0, 10);
+// Uses local date components, not .toISOString() (which is UTC) — critical for
+// India (UTC+5:30), where a UTC-based "today" would be wrong for several hours
+// after midnight local time, right when a clinic might still be logging cases.
+const todayISO = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
+// Same local-time fix, generalized for any Date object (not just "now") —
+// used everywhere the app previously called the UTC-based .toISOString().
+const localISO = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const d10 = (v) => (v ? String(v).slice(0, 10) : "");
 function fyOf(dateStr) {
   const d = new Date(dateStr); const y = d.getFullYear(), m = d.getMonth() + 1;
@@ -882,7 +888,25 @@ export default function App() {
           .card h2{font-family:'Plus Jakarta Sans',sans-serif;font-size:16.5px;margin:0 0 12px;color:var(--primary-dark);}
           .grid-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:20px;}
           .launcher-wrap{background:linear-gradient(160deg,#EFEBFA 0%,#F6F3FC 45%,#FDFBFF 100%);border-radius:16px;padding:36px 28px;min-height:calc(100vh - 100px);}
-          .launcher-header{margin-bottom:28px;}
+          .launcher-header{margin-bottom:0;}
+          .launcher-header-row{display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:20px;margin-bottom:28px;}
+          .upload-calendar{background:#fff;border:1px solid #EAE6F5;border-radius:14px;padding:14px 16px;box-shadow:0 2px 8px rgba(80,60,120,.07);min-width:280px;max-width:420px;}
+          .upload-calendar-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px;}
+          .upload-calendar-title{font-size:12.5px;font-weight:800;color:var(--primary-dark);}
+          .upload-calendar-filters{display:flex;gap:6px;}
+          .upload-calendar-filters select{font-size:11px;padding:3px 6px;border-radius:6px;border:1px solid var(--border);background:#fff;}
+          .upload-calendar-strip{display:flex;flex-wrap:wrap;gap:5px;}
+          .upload-day{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;cursor:pointer;transition:transform .1s ease;}
+          .upload-day:hover{transform:scale(1.18);}
+          .upload-day-green{background:linear-gradient(160deg,#3FB86E,#1F8A5F);box-shadow:0 1px 3px rgba(31,138,95,.4);}
+          .upload-day-red{background:linear-gradient(160deg,#E86A5C,#B3423A);box-shadow:0 1px 3px rgba(179,66,58,.4);}
+          .upload-day-future{background:#E8E5F0;color:#A79FC0;box-shadow:none;cursor:default;}
+          .upload-day-future:hover{transform:none;}
+          .upload-calendar-legend{display:flex;flex-wrap:wrap;gap:12px;margin-top:10px;font-size:10.5px;color:var(--ink-soft);align-items:center;}
+          .upload-calendar-legend .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px;vertical-align:middle;}
+          .dot-green{background:#1F8A5F;}
+          .dot-red{background:#B3423A;}
+          .upload-calendar-month{margin-left:auto;font-weight:700;color:var(--ink);}
           .launcher-header h2{font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;font-size:26px;color:var(--primary-dark);margin:0 0 6px;}
           .launcher-header p{color:var(--ink-soft);font-size:14px;margin:0;}
           .launcher-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:18px;}
@@ -1253,7 +1277,7 @@ function ShiftCollectionChart({ collections, cases, fy }) {
     const map = {};
     let d = new Date(from + "T00:00:00");
     const end = new Date(to + "T00:00:00");
-    while (d <= end) { map[d.toISOString().slice(0, 10)] = { date: d.toISOString().slice(5, 10), Morning: 0, Evening: 0, Unlinked: 0 }; d.setDate(d.getDate() + 1); }
+    while (d <= end) { const iso = localISO(d); map[iso] = { date: iso.slice(5), Morning: 0, Evening: 0, Unlinked: 0 }; d.setDate(d.getDate() + 1); }
     collections.filter((c) => c.date >= from && c.date <= to).forEach((c) => {
       const row = map[c.date];
       if (!row) return;
@@ -1320,6 +1344,64 @@ function ShiftCollectionChart({ collections, cases, fy }) {
  *  stats are computed client-side from data already loaded elsewhere in the
  *  app — no new API calls, no new attack surface, and every tile still
  *  respects the exact same view-permission filter used everywhere else. */
+/** A month-view calendar strip: one small circle per day, colored from the
+ *  live Case Records data — green if at least one case was logged that
+ *  day, red if a past/today day has none (pending), muted grey for days
+ *  that haven't happened yet (nothing can be "pending" for the future). */
+function CaseUploadCalendar({ cases, setView }) {
+  const today = todayISO();
+  const now = new Date();
+  const [month, setMonth] = useState(now.getMonth() + 1); // 1-12
+  const [year, setYear] = useState(now.getFullYear());
+
+  const caseDates = useMemo(() => new Set(cases.map((c) => c.date)), [cases]);
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const monthStr = String(month).padStart(2, "0");
+
+  const days = Array.from({ length: daysInMonth }, (_, i) => {
+    const dayNum = i + 1;
+    const iso = `${year}-${monthStr}-${String(dayNum).padStart(2, "0")}`;
+    const hasCase = caseDates.has(iso);
+    const status = iso > today ? "future" : hasCase ? "green" : "red";
+    return { dayNum, iso, status };
+  });
+
+  const uploadedCount = days.filter((d) => d.status === "green").length;
+  const pendingCount = days.filter((d) => d.status === "red").length;
+  const monthLabel = new Date(year, month - 1, 1).toLocaleDateString("en-IN", { month: "long" });
+  const years = Array.from({ length: 6 }, (_, i) => now.getFullYear() - 4 + i);
+
+  return (
+    <div className="upload-calendar no-print">
+      <div className="upload-calendar-head">
+        <span className="upload-calendar-title">📅 Case Upload Status</span>
+        <div className="upload-calendar-filters">
+          <select value={month} onChange={(e) => setMonth(Number(e.target.value))}>
+            {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+              <option key={m} value={m}>{new Date(2000, m - 1, 1).toLocaleDateString("en-IN", { month: "short" })}</option>
+            ))}
+          </select>
+          <select value={year} onChange={(e) => setYear(Number(e.target.value))}>
+            {years.map((y) => <option key={y} value={y}>{y}</option>)}
+          </select>
+        </div>
+      </div>
+      <div className="upload-calendar-strip">
+        {days.map((d) => (
+          <div key={d.iso} className={`upload-day upload-day-${d.status}`} title={`${formatDate(d.iso)} — ${d.status === "green" ? "Case record(s) uploaded" : d.status === "red" ? "No case record uploaded" : "Upcoming"}`} onClick={() => setView("cases")}>
+            {d.dayNum}
+          </div>
+        ))}
+      </div>
+      <div className="upload-calendar-legend">
+        <span><span className="dot dot-green" /> {uploadedCount} day(s) uploaded</span>
+        <span><span className="dot dot-red" /> {pendingCount} day(s) pending</span>
+        {monthLabel && <span className="upload-calendar-month">{monthLabel} {year}</span>}
+      </div>
+    </div>
+  );
+}
+
 function LauncherGrid({ settings, session, can, setView, setPendingSearch, cases, collections, expenses, doctorPays, referrals, gifts, doctors, patientsMaster }) {
   const { call } = useApi();
   const tiles = NAV.filter((n) => !n.adminOnly || session.role === "Admin").filter((n) => !n.module || can(n.module, "view"));
@@ -1327,7 +1409,7 @@ function LauncherGrid({ settings, session, can, setView, setPendingSearch, cases
   const grouped = ["clinical", "finance", "operations", "admin"].map((g) => ({ group: g, items: tiles.filter((n) => n.group === g) })).filter((g) => g.items.length > 0);
 
   const t = todayISO();
-  const weekStart = (() => { const d = new Date(); d.setDate(d.getDate() - 6); return d.toISOString().slice(0, 10); })();
+  const weekStart = (() => { const d = new Date(); d.setDate(d.getDate() - 6); return localISO(d); })();
   const monthStart = t.slice(0, 8) + "01";
 
   // Micro-stats: only shown where a genuinely meaningful, honestly-computed
@@ -1402,9 +1484,12 @@ function LauncherGrid({ settings, session, can, setView, setPendingSearch, cases
 
   return (
     <div className="launcher-wrap">
-      <div className="launcher-header">
-        <h2>{settings.clinicName || "Ganatra Clinic"}</h2>
-        <p>Welcome back, {session.name.split(" ")[0]} — pick where you want to go.</p>
+      <div className="launcher-header-row">
+        <div className="launcher-header">
+          <h2>{settings.clinicName || "Ganatra Clinic"}</h2>
+          <p>Welcome back, {session.name.split(" ")[0]} — pick where you want to go.</p>
+        </div>
+        {can("cases", "view") && <CaseUploadCalendar cases={cases} setView={setView} />}
       </div>
 
       <div className="launcher-search no-print">
@@ -1526,8 +1611,8 @@ function Dashboard({ settings, collections, referrals, expenses, doctorPays, cas
   const [drill, setDrill] = useState(null);
 
   const t = todayISO();
-  const yest = (() => { const d = new Date(); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10); })();
-  const twoDaysAgo = (() => { const d = new Date(); d.setDate(d.getDate() - 2); return d.toISOString().slice(0, 10); })();
+  const yest = (() => { const d = new Date(); d.setDate(d.getDate() - 1); return localISO(d); })();
+  const twoDaysAgo = (() => { const d = new Date(); d.setDate(d.getDate() - 2); return localISO(d); })();
   const monthStart = t.slice(0, 8) + "01";
   const monthLabel = new Date(t + "T00:00:00").toLocaleDateString("en-IN", { month: "long", year: "numeric" });
   const range = fyRange(fy);
@@ -1551,7 +1636,7 @@ function Dashboard({ settings, collections, referrals, expenses, doctorPays, cas
   // Always the true "last 7 days," independent of the Week-of-month dropdown above —
   // used only for the top insight banner and KPI cards, which should never silently
   // change meaning just because someone picked a different week to look back at.
-  const rollingWeekStart = (() => { const d = new Date(); d.setDate(d.getDate() - 6); return d.toISOString().slice(0, 10); })();
+  const rollingWeekStart = (() => { const d = new Date(); d.setDate(d.getDate() - 6); return localISO(d); })();
   const rollingWeekSummary = periodSummary(collections, expenses, rollingWeekStart, t);
   const monthSummary = periodSummary(collections, expenses, monthStart, t);
   const yearSummary = periodSummary(collections, expenses, range.start, range.end);
@@ -1577,7 +1662,7 @@ function Dashboard({ settings, collections, referrals, expenses, doctorPays, cas
   const outstanding = collections.reduce((a, c) => a + Number(c.balance || 0), 0);
 
   const last30 = [];
-  for (let i = 29; i >= 0; i--) { const dt = new Date(); dt.setDate(dt.getDate() - i); const iso = dt.toISOString().slice(0, 10); const s = periodSummary(collections, [], iso, iso); last30.push({ date: iso.slice(5), amount: s.collectedTotal + s.outstanding }); }
+  for (let i = 29; i >= 0; i--) { const dt = new Date(); dt.setDate(dt.getDate() - i); const iso = localISO(dt); const s = periodSummary(collections, [], iso, iso); last30.push({ date: iso.slice(5), amount: s.collectedTotal + s.outstanding }); }
   const expenseByCat = {};
   expenses.filter((e) => e.date >= range.start && e.date <= range.end).forEach((e) => { expenseByCat[e.category] = (expenseByCat[e.category] || 0) + Number(e.amount); });
   const pieData = Object.entries(expenseByCat).map(([name, value]) => ({ name, value }));
@@ -1588,8 +1673,8 @@ function Dashboard({ settings, collections, referrals, expenses, doctorPays, cas
   ].filter((x) => x.value > 0);
 
   // Previous 7 days (before this week), for the "up/down vs last week" insight
-  const prevWeekEnd = (() => { const d = new Date(); d.setDate(d.getDate() - 7); return d.toISOString().slice(0, 10); })();
-  const prevWeekStart = (() => { const d = new Date(); d.setDate(d.getDate() - 13); return d.toISOString().slice(0, 10); })();
+  const prevWeekEnd = (() => { const d = new Date(); d.setDate(d.getDate() - 7); return localISO(d); })();
+  const prevWeekStart = (() => { const d = new Date(); d.setDate(d.getDate() - 13); return localISO(d); })();
   const prevWeekSummary = periodSummary(collections, expenses, prevWeekStart, prevWeekEnd);
   const weekChangePct = prevWeekSummary.collectedTotal > 0
     ? Math.round(((rollingWeekSummary.collectedTotal - prevWeekSummary.collectedTotal) / prevWeekSummary.collectedTotal) * 100)
@@ -1597,7 +1682,7 @@ function Dashboard({ settings, collections, referrals, expenses, doctorPays, cas
 
   // Sparkline series: last 14 days of collected+expense, for the KPI cards
   const last14Spark = [];
-  for (let i = 13; i >= 0; i--) { const dt = new Date(); dt.setDate(dt.getDate() - i); const iso = dt.toISOString().slice(0, 10); const s = periodSummary(collections, expenses, iso, iso); last14Spark.push({ collected: s.collectedTotal, expense: s.expenseTotal, net: s.netProfit }); }
+  for (let i = 13; i >= 0; i--) { const dt = new Date(); dt.setDate(dt.getDate() - i); const iso = localISO(dt); const s = periodSummary(collections, expenses, iso, iso); last14Spark.push({ collected: s.collectedTotal, expense: s.expenseTotal, net: s.netProfit }); }
   const sparkCollected = last14Spark.map((s) => ({ v: s.collected }));
   const sparkExpense = last14Spark.map((s) => ({ v: s.expense }));
   const sparkOutstanding = last14Spark.map(() => ({ v: outstanding })); // flat — overall figure, shown for shape consistency
@@ -1771,10 +1856,10 @@ function CaseRecords({ cases, addCase, updateCase, removeCase, doctors, patients
 
   const normalizeDate = (v) => {
     if (!v) return "";
-    if (v instanceof Date) return v.toISOString().slice(0, 10);
+    if (v instanceof Date) return localISO(v);
     const s = String(v).trim();
     const d = new Date(s);
-    return isNaN(d.getTime()) ? "" : d.toISOString().slice(0, 10);
+    return isNaN(d.getTime()) ? "" : localISO(d);
   };
 
   const [bulkBusy, setBulkBusy] = useState(false);
@@ -2457,7 +2542,7 @@ function DoctorShifts({ doctors, addDoctor, updateDoctor, removeDoctor, doctorPa
 
   useEffect(() => {
     const to = todayISO(); const fromD = new Date(); fromD.setDate(fromD.getDate() - 13);
-    const from = fromD.toISOString().slice(0, 10);
+    const from = localISO(fromD);
     call(`/doctor-pays/daily-net?from=${from}&to=${to}`)
       .then((rows) => setLast14(rows.map((r) => ({ date: d10(r.date), collection: Number(r.collection), pay: Number(r.doctor_pay), otherExp: Number(r.other_expense), net: Number(r.net) }))))
       .catch(() => {});
@@ -2942,7 +3027,7 @@ function FinancialStatements({ fy, settings, can }) {
 function AccessReport({ can }) {
   const { call } = useApi();
   const today = todayISO();
-  const monthAgo = (() => { const d = new Date(); d.setDate(d.getDate() - 30); return d.toISOString().slice(0, 10); })();
+  const monthAgo = (() => { const d = new Date(); d.setDate(d.getDate() - 30); return localISO(d); })();
   const [from, setFrom] = useState(monthAgo);
   const [to, setTo] = useState(today);
   const [rows, setRows] = useState([]);
