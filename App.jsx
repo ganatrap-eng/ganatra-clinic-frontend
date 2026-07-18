@@ -1108,6 +1108,7 @@ export default function App() {
           .insight-banner .insight-icon{font-size:22px;}
           .mode-pill{display:inline-flex;align-items:center;gap:5px;}
           .period-card{margin-bottom:0;}
+          .period-card h2{text-align:center;}
           .period-card table{font-size:12.5px;}
           .period-card td{padding:5px 4px;}
           .stat{background:var(--surface);border:1px solid var(--border);border-left:4px solid var(--accent);border-radius:10px;padding:14px 16px;}
@@ -1719,9 +1720,15 @@ function Dashboard({ settings, collections, referrals, expenses, doctorPays, cas
   const t = todayISO();
   const yest = (() => { const d = new Date(); d.setDate(d.getDate() - 1); return localISO(d); })();
   const twoDaysAgo = (() => { const d = new Date(); d.setDate(d.getDate() - 2); return localISO(d); })();
-  const monthStart = t.slice(0, 8) + "01";
-  const monthLabel = new Date(t + "T00:00:00").toLocaleDateString("en-IN", { month: "long", year: "numeric" });
   const range = fyRange(fy);
+
+  // Month snapshot card — its own month/year filter, independent of "today".
+  const [snapMonth, setSnapMonth] = useState(t.slice(0, 7)); // "YYYY-MM"
+  const isCurrentSnapMonth = snapMonth === t.slice(0, 7);
+  const daysInSnapMonth = new Date(Number(snapMonth.slice(0, 4)), Number(snapMonth.slice(5, 7)), 0).getDate();
+  const snapMonthStart = `${snapMonth}-01`;
+  const snapMonthEnd = isCurrentSnapMonth ? t : `${snapMonth}-${String(daysInSnapMonth).padStart(2, "0")}`;
+  const snapMonthLabel = new Date(`${snapMonth}-01T00:00:00`).toLocaleDateString("en-IN", { month: "long", year: "numeric" });
 
   // Week-of-month selector: "Week 1" = days 1–7, "Week 2" = days 8–14, and so
   // on, for whichever month the person picks — not a fixed rolling 7 days.
@@ -1744,7 +1751,7 @@ function Dashboard({ settings, collections, referrals, expenses, doctorPays, cas
   // change meaning just because someone picked a different week to look back at.
   const rollingWeekStart = (() => { const d = new Date(); d.setDate(d.getDate() - 6); return localISO(d); })();
   const rollingWeekSummary = periodSummary(collections, expenses, rollingWeekStart, t);
-  const monthSummary = periodSummary(collections, expenses, monthStart, t);
+  const monthSummary = periodSummary(collections, expenses, snapMonthStart, snapMonthEnd);
   const yearSummary = periodSummary(collections, expenses, range.start, range.end);
 
   const caseById = useMemo(() => Object.fromEntries(cases.map((c) => [c.id, c])), [cases]);
@@ -1767,8 +1774,20 @@ function Dashboard({ settings, collections, referrals, expenses, doctorPays, cas
   const netProfit = income ? income.netProfit : null;
   const outstanding = collections.reduce((a, c) => a + Number(c.balance || 0), 0);
 
-  const last30 = [];
-  for (let i = 29; i >= 0; i--) { const dt = new Date(); dt.setDate(dt.getDate() - i); const iso = localISO(dt); const s = periodSummary(collections, [], iso, iso); last30.push({ date: iso.slice(5), amount: s.collectedTotal + s.outstanding }); }
+  // Collection trend — its own month/year filter (shown top-right of the
+  // card), so the x-axis can just be day numbers 1, 2, 3… since the
+  // month/year context is already visible next to the title.
+  const [trendMonth, setTrendMonth] = useState(t.slice(0, 7)); // "YYYY-MM"
+  const isCurrentTrendMonth = trendMonth === t.slice(0, 7);
+  const daysInTrendMonth = new Date(Number(trendMonth.slice(0, 4)), Number(trendMonth.slice(5, 7)), 0).getDate();
+  const lastTrendDay = isCurrentTrendMonth ? Number(t.slice(8, 10)) : daysInTrendMonth;
+  const trendMonthLabel = new Date(`${trendMonth}-01T00:00:00`).toLocaleDateString("en-IN", { month: "long", year: "numeric" });
+  const trendData = [];
+  for (let day = 1; day <= lastTrendDay; day++) {
+    const iso = `${trendMonth}-${String(day).padStart(2, "0")}`;
+    const s = periodSummary(collections, [], iso, iso);
+    trendData.push({ day, amount: s.collectedTotal + s.outstanding });
+  }
   const expenseByCat = {};
   expenses.filter((e) => e.date >= range.start && e.date <= range.end).forEach((e) => { expenseByCat[e.category] = (expenseByCat[e.category] || 0) + Number(e.amount); });
   const pieData = Object.entries(expenseByCat).map(([name, value]) => ({ name, value }));
@@ -1793,16 +1812,28 @@ function Dashboard({ settings, collections, referrals, expenses, doctorPays, cas
   const sparkExpense = last14Spark.map((s) => ({ v: s.expense }));
   const sparkOutstanding = last14Spark.map(() => ({ v: outstanding })); // flat — overall figure, shown for shape consistency
 
-  // Doctor-wise revenue for the FY, via each collection's linked case
+  // Doctor-wise revenue for the FY, via each collection's linked case,
+  // broken down by financial-year quarter (Q1 Apr-Jun … Q4 Jan-Mar).
   const doctorRevenue = useMemo(() => {
+    const startYear = parseInt(fy.split("-")[0], 10);
+    const quarters = [
+      { key: "q1", start: `${startYear}-04-01`, end: `${startYear}-06-30` },
+      { key: "q2", start: `${startYear}-07-01`, end: `${startYear}-09-30` },
+      { key: "q3", start: `${startYear}-10-01`, end: `${startYear}-12-31` },
+      { key: "q4", start: `${startYear + 1}-01-01`, end: `${startYear + 1}-03-31` },
+    ];
     const totals = {};
     collections.filter((c) => c.date >= range.start && c.date <= range.end).forEach((c) => {
       const linked = c.caseId ? caseById[c.caseId] : null;
       const name = linked?.doctorName || "Unassigned";
-      totals[name] = (totals[name] || 0) + Number(c.amountDue || 0);
+      if (!totals[name]) totals[name] = { q1: 0, q2: 0, q3: 0, q4: 0 };
+      const q = quarters.find((qq) => c.date >= qq.start && c.date <= qq.end);
+      if (q) totals[name][q.key] += Number(c.amountDue || 0);
     });
-    return Object.entries(totals).sort((a, b) => b[1] - a[1]);
-  }, [collections, caseById, range.start, range.end]);
+    return Object.entries(totals)
+      .map(([name, q]) => ({ name, ...q, total: q.q1 + q.q2 + q.q3 + q.q4 }))
+      .sort((a, b) => b.total - a.total);
+  }, [collections, caseById, range.start, range.end, fy]);
 
   // "My performance" — only shown to a Doctor-role account linked to a
   // doctor-roster entry. The clinic-wide numbers below remain unchanged and
@@ -1875,18 +1906,31 @@ function Dashboard({ settings, collections, referrals, expenses, doctorPays, cas
             </div>
           }
         />
-        <PeriodCard title={monthLabel} summary={monthSummary} start={monthStart} end={t} onDrill={openDrill} />
+        <PeriodCard
+          title={snapMonthLabel} summary={monthSummary} start={snapMonthStart} end={snapMonthEnd} onDrill={openDrill}
+          headerExtra={
+            <div className="week-picker no-print">
+              <input type="month" value={snapMonth} onChange={(e) => setSnapMonth(e.target.value)} />
+            </div>
+          }
+        />
         <PeriodCard title={`FY ${fy}`} summary={yearSummary} start={range.start} end={range.end} onDrill={openDrill} />
       </div>
 
-      <div className="section-header">Trends</div>
+      <div className="section-header" style={{ textAlign: "center" }}>Trends</div>
       <div className="card">
-        <h2>📈 Collection trend — last 30 days</h2>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10, marginBottom: 4 }}>
+          <h2 style={{ margin: 0 }}>📈 Collection trend</h2>
+          <div className="no-print" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--primary-dark)" }}>{trendMonthLabel}</span>
+            <input type="month" value={trendMonth} onChange={(e) => setTrendMonth(e.target.value)} style={{ fontSize: 11.5, padding: "4px 6px", borderRadius: 6, border: "1px solid var(--border)" }} />
+          </div>
+        </div>
         <ResponsiveContainer width="100%" height={220}>
-          <AreaChart data={last30}>
+          <AreaChart data={trendData}>
             <defs><linearGradient id="cg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#714B67" stopOpacity={0.35} /><stop offset="100%" stopColor="#714B67" stopOpacity={0.02} /></linearGradient></defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="#E1E8E6" /><XAxis dataKey="date" fontSize={11} /><YAxis fontSize={11} />
-            <Tooltip formatter={(v) => inr(v)} /><Area type="monotone" dataKey="amount" stroke="#714B67" fill="url(#cg)" strokeWidth={2} />
+            <CartesianGrid strokeDasharray="3 3" stroke="#E1E8E6" /><XAxis dataKey="day" fontSize={11} /><YAxis fontSize={11} />
+            <Tooltip formatter={(v) => inr(v)} labelFormatter={(d) => `${trendMonthLabel.split(" ")[0]} ${d}`} /><Area type="monotone" dataKey="amount" stroke="#714B67" fill="url(#cg)" strokeWidth={2} />
           </AreaChart>
         </ResponsiveContainer>
       </div>
@@ -1915,8 +1959,8 @@ function Dashboard({ settings, collections, referrals, expenses, doctorPays, cas
         <h2>👩‍⚕️ Revenue by doctor — FY {fy}</h2>
         {doctorRevenue.length === 0 ? <div className="empty">No collections linked to a doctor yet this financial year.</div> : (
           <table>
-            <thead><tr><th>Doctor</th><th className="num">Billed revenue</th></tr></thead>
-            <tbody>{doctorRevenue.map(([name, amt]) => (<tr key={name} style={{ cursor: "pointer" }} onClick={() => openDrill({ kind: "doctor", doctorName: name, start: range.start, end: range.end, label: `FY ${fy}` })}><td style={{ textDecoration: "underline", textDecorationStyle: "dotted", textDecorationColor: "var(--ink-soft)" }}>{name}</td><td className="num">{inr(amt)}</td></tr>))}</tbody>
+            <thead><tr><th>Doctor</th><th className="num">Q1</th><th className="num">Q2</th><th className="num">Q3</th><th className="num">Q4</th><th className="num">Total Billed Revenue</th></tr></thead>
+            <tbody>{doctorRevenue.map((d) => (<tr key={d.name} style={{ cursor: "pointer" }} onClick={() => openDrill({ kind: "doctor", doctorName: d.name, start: range.start, end: range.end, label: `FY ${fy}` })}><td style={{ textDecoration: "underline", textDecorationStyle: "dotted", textDecorationColor: "var(--ink-soft)" }}>{d.name}</td><td className="num">{inr(d.q1)}</td><td className="num">{inr(d.q2)}</td><td className="num">{inr(d.q3)}</td><td className="num">{inr(d.q4)}</td><td className="num" style={{ fontWeight: 700 }}>{inr(d.total)}</td></tr>))}</tbody>
           </table>
         )}
         <div className="note-box">Based on Amount Due for collections linked to a case (shift/doctor comes from the linked case record) — "Unassigned" means the collection isn't linked to a case, or the case has no doctor selected.</div>
