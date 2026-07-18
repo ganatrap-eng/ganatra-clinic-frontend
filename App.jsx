@@ -3195,6 +3195,9 @@ function AccessReport({ can }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
+  const [userQuery, setUserQuery] = useState("");
+  const [moduleFilter, setModuleFilter] = useState("");
+  const [actionFilter, setActionFilter] = useState("");
 
   useEffect(() => { filters.setFrom(monthAgo); filters.setTo(today); }, []); // eslint-disable-line
 
@@ -3206,13 +3209,21 @@ function AccessReport({ can }) {
 
   const moduleLabel = (m) => PERMISSION_MODULES.find((x) => x.key === m)?.label || m;
   const stamp = (r) => new Date(r.created_at).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" });
-  const exportRows = rows.map((r) => ({ ...r, date: String(r.created_at).slice(0, 10) }));
+
+  const actionOptions = [...new Set(rows.map((r) => r.action).filter(Boolean))].sort();
+  const visibleRows = rows.filter((r) =>
+    (!userQuery.trim() || fuzzyText(r.user_label, userQuery)) &&
+    (!moduleFilter || r.module === moduleFilter) &&
+    (!actionFilter || r.action === actionFilter)
+  );
+  const exportRows = visibleRows.map((r) => ({ ...r, date: String(r.created_at).slice(0, 10) }));
+  const clearSearch = () => { setUserQuery(""); setModuleFilter(""); setActionFilter(""); };
 
   return (
     <div>
       <div className="card">
         <div className="register-toolbar">
-          <h2 style={{ margin: 0 }}>User Access Report</h2>
+          <h2 style={{ margin: 0 }}>User Access Report ({visibleRows.length} of {rows.length})</h2>
           <CustomExport rows={exportRows} filters={filters} dateField="date" filenameBase="user-access-report" printTitle="User Access Report" canExport={can("auditLog", "export")} buildSheets={(data) => ({ AccessLog: data.map((r) => ({ DateTime: stamp(r), User: r.user_label, Module: moduleLabel(r.module), Action: r.action })) })} printColumns={[{ label: "Date & Time", value: (r) => stamp(r) }, { label: "User", value: (r) => r.user_label }, { label: "Module", value: (r) => moduleLabel(r.module) }, { label: "Action", value: (r) => r.action }]} />
         </div>
         <p style={{ fontSize: 12.5, color: "var(--ink-soft)", marginTop: -8 }}>Who accessed which module, and when — logged automatically as staff use the app.</p>
@@ -3221,11 +3232,27 @@ function AccessReport({ can }) {
           <div><label>To</label><input type="date" value={filters.to} onChange={(e) => filters.setTo(e.target.value)} /></div>
         </div>
         <button className="btn" type="button" onClick={load}>Apply range</button>
+        <div className="form-grid" style={{ maxWidth: 560, marginTop: 14 }}>
+          <div><label>Search User</label><input type="text" placeholder="Name contains…" value={userQuery} onChange={(e) => setUserQuery(e.target.value)} /></div>
+          <div><label>Search Module</label>
+            <select value={moduleFilter} onChange={(e) => setModuleFilter(e.target.value)}>
+              <option value="">All modules</option>
+              {PERMISSION_MODULES.map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
+            </select>
+          </div>
+          <div><label>Search Action</label>
+            <select value={actionFilter} onChange={(e) => setActionFilter(e.target.value)}>
+              <option value="">All actions</option>
+              {actionOptions.map((a) => <option key={a} value={a}>{a}</option>)}
+            </select>
+          </div>
+        </div>
+        {(userQuery.trim() || moduleFilter || actionFilter) && <button className="btn secondary small" type="button" style={{ marginTop: 8 }} onClick={clearSearch}>✕ Clear search</button>}
         <ErrorNote msg={err} />
-        {loading ? <div className="empty">Loading…</div> : rows.length === 0 ? <div className="empty">No access recorded in this range.</div> : (
+        {loading ? <div className="empty">Loading…</div> : visibleRows.length === 0 ? <div className="empty">No access recorded matching this search.</div> : (
           <table>
             <thead><tr><th>Date &amp; Time</th><th>User</th><th>Module</th><th>Action</th></tr></thead>
-            <tbody>{rows.map((r) => (<tr key={r.id}><td>{stamp(r)}</td><td>{r.user_label}</td><td>{moduleLabel(r.module)}</td><td style={{ textTransform: "capitalize" }}>{r.action}</td></tr>))}</tbody>
+            <tbody>{visibleRows.map((r) => (<tr key={r.id}><td>{stamp(r)}</td><td>{r.user_label}</td><td>{moduleLabel(r.module)}</td><td style={{ textTransform: "capitalize" }}>{r.action}</td></tr>))}</tbody>
           </table>
         )}
       </div>
