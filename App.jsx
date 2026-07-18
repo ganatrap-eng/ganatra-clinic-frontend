@@ -6,7 +6,7 @@ import {
 } from "recharts";
 
 /* ============================================================
-   GANATRA CLINIC — API-connected build.
+   CLINIC ERP — API-connected build.
    Same interface as the offline prototype, but every read and
    write now goes through the Express/PostgreSQL backend.
    ============================================================ */
@@ -105,8 +105,12 @@ async function apiFetch(origin, token, path, { method = "GET", body, isForm = fa
   return data;
 }
 
-async function storeGet(key) { try { const r = await window.storage.get(key, false); return r ? JSON.parse(r.value) : null; } catch { return null; } }
-async function storeSet(key, value) { try { await window.storage.set(key, JSON.stringify(value), false); } catch (e) { console.error(e); } }
+// Remembers the API server URL across visits in this browser. Previously
+// called window.storage, an API that only exists inside Claude's own
+// artifact environment — it doesn't exist in a real deployed site, so this
+// was silently failing every time and never actually persisting anything.
+async function storeGet(key) { try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : null; } catch { return null; } }
+async function storeSet(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) { console.error(e); } }
 
 function exportExcel(filename, sheetsObj) {
   const wb = XLSX.utils.book_new();
@@ -388,7 +392,7 @@ const mapGift = (r) => ({ id: r.id, date: d10(r.gift_date), repName: r.rep_name,
 const mapExpense = (r) => ({ id: r.id, date: d10(r.expense_date), category: r.category, amount: Number(r.amount), narration: r.narration, image: r.image_url, createdAt: r.created_at });
 const mapAsset = (r) => ({ id: r.id, name: r.name, block: r.block, rate: Number(r.rate), purchaseDate: d10(r.purchase_date), cost: Number(r.cost) });
 const mapCapital = (r) => ({ id: r.id, date: d10(r.txn_date), type: r.txn_type, amount: Number(r.amount), note: r.note });
-const mapSettings = (r) => ({ clinicName: r.clinic_name || "Ganatra Clinic", proprietor: r.proprietor || "Dr. Bhavisha Pratik Ganatra", address: r.address || "", phone: r.phone || "" });
+const mapSettings = (r) => ({ clinicName: r.clinic_name || "Your Clinic", proprietor: r.proprietor || "", address: r.address || "", phone: r.phone || "" });
 
 /* -------- Image capture: upload, rotate to align, attach via API -------- */
 /** Displays a user's avatar — fetched the same authenticated way as every
@@ -708,7 +712,7 @@ function AuthScreen({ onLogin, origin, setOrigin }) {
           <svg viewBox="0 0 200 40" width="180" height="36" style={{ margin: "0 auto", display: "block" }}>
             <path className="pulse-path" d="M0,20 L55,20 L65,4 L75,36 L85,20 L200,20" />
           </svg>
-          <div className="brand">GANATRA CLINIC</div>
+          <div className="brand">CLINIC ERP</div>
           <div className="sub">Practice &amp; Accounts Manager</div>
         </div>
         <div className="auth-body">
@@ -721,7 +725,7 @@ function AuthScreen({ onLogin, origin, setOrigin }) {
               </div>
               <form onSubmit={submit}>
                 {mode === "register" && (
-                  <div className="field"><label>Your name</label><input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Front desk / Dr. Ganatra" /></div>
+                  <div className="field"><label>Your name</label><input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Front desk / Dr. Smith" /></div>
                 )}
                 <div className="field"><label>User ID</label><input value={userId} onChange={(e) => setUserId(e.target.value)} autoCapitalize="none" placeholder="your-user-id" /></div>
                 {mode === "register" && (
@@ -853,7 +857,7 @@ const NAV = [
 ];
 
 export default function App() {
-  const [origin, setOrigin] = useState("https://ganatra-clinic.onrender.com");
+  const [origin, setOrigin] = useState(import.meta.env.VITE_API_URL || "");
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState("");
@@ -864,7 +868,7 @@ export default function App() {
   const clearPendingSearch = useCallback(() => setPendingSearch(null), []);
   const [fy, setFy] = useState(fyOf(todayISO()));
 
-  const [settings, setSettings] = useState({ clinicName: "Ganatra Clinic", proprietor: "Dr. Bhavisha Pratik Ganatra", address: "", phone: "" });
+  const [settings, setSettings] = useState({ clinicName: "Your Clinic", proprietor: "", address: "", phone: "" });
   const [doctors, setDoctors] = useState([]);
   const [cases, setCases] = useState([]);
   const [collections, setCollections] = useState([]);
@@ -1203,7 +1207,7 @@ export default function App() {
         <button className="mobile-nav-toggle no-print" onClick={() => setNavOpen((o) => !o)} title="Menu" type="button">☰</button>
         <div className={"nav-backdrop" + (navOpen ? " open" : "")} onClick={() => setNavOpen(false)} />
         <nav className={"sidebar" + (navOpen ? " open" : "")}>
-          <div className="brand" style={{ cursor: "pointer" }} onClick={() => goto("launcher")} title="Back to app launcher">GANATRA CLINIC</div>
+          <div className="brand" style={{ cursor: "pointer" }} onClick={() => goto("launcher")} title="Back to app launcher">{(settings.clinicName || "Your Clinic").toUpperCase()}</div>
           <div className="biz" style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <Avatar url={session.avatarUrl} name={session.name} size={38} />
             <span>{settings.proprietor}<br />{session.name} ({session.userId}) · {session.role}<br /><span style={{ opacity: .7 }}>{origin}</span></span>
@@ -1637,7 +1641,7 @@ function LauncherGrid({ settings, session, can, setView, setPendingSearch, cases
     <div className="launcher-wrap">
       <div className="launcher-header-row">
         <div className="launcher-header">
-          <h2>{settings.clinicName || "Ganatra Clinic"}</h2>
+          <h2>{settings.clinicName || "Your Clinic"}</h2>
           <p>Welcome back, {session.name.split(" ")[0]} — pick where you want to go.</p>
 
           <div className="launcher-search no-print">
@@ -2059,9 +2063,9 @@ function CaseRecords({ cases, addCase, updateCase, removeCase, doctors, patients
   const downloadTemplate = () => {
     const wb = XLSX.utils.book_new();
     const example = [
-      ["2026-07-13", "Ramesh Patel", "9825012345", doctors[0]?.name || "Dr. Bhavisha Pratik Ganatra", "Morning", "Fever, body ache — 3 days", "Paracetamol 650", 10, 2, 500, "Cash"],
-      ["2026-07-13", "Ramesh Patel", "9825012345", doctors[0]?.name || "Dr. Bhavisha Pratik Ganatra", "Morning", "Fever, body ache — 3 days", "ORS sachets", 5, 10, "", ""],
-      ["2026-07-13", "Sunita Mehta", "9825098765", doctors[0]?.name || "Dr. Bhavisha Pratik Ganatra", "Evening", "Routine checkup", "", "", "", "", ""],
+      ["2026-07-13", "Ramesh Patel", "9825012345", doctors[0]?.name || "Dr. Example", "Morning", "Fever, body ache — 3 days", "Paracetamol 650", 10, 2, 500, "Cash"],
+      ["2026-07-13", "Ramesh Patel", "9825012345", doctors[0]?.name || "Dr. Example", "Morning", "Fever, body ache — 3 days", "ORS sachets", 5, 10, "", ""],
+      ["2026-07-13", "Sunita Mehta", "9825098765", doctors[0]?.name || "Dr. Example", "Evening", "Routine checkup", "", "", "", "", ""],
     ];
     const ws = XLSX.utils.aoa_to_sheet([TEMPLATE_HEADERS, ...example]);
     XLSX.utils.book_append_sheet(wb, ws, "Case Records");
