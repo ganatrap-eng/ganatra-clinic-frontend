@@ -3191,15 +3191,16 @@ function AccessReport({ can }) {
   const { call } = useApi();
   const today = todayISO();
   const monthAgo = (() => { const d = new Date(); d.setDate(d.getDate() - 30); return localISO(d); })();
-  const [from, setFrom] = useState(monthAgo);
-  const [to, setTo] = useState(today);
+  const filters = useCustomViewFilters();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
 
+  useEffect(() => { filters.setFrom(monthAgo); filters.setTo(today); }, []); // eslint-disable-line
+
   const load = () => {
     setLoading(true); setErr("");
-    call(`/audit-log?from=${from}&to=${to}`).then(setRows).catch((e) => setErr(e.message)).finally(() => setLoading(false));
+    call(`/audit-log?from=${filters.from}&to=${filters.to}`).then(setRows).catch((e) => setErr(e.message)).finally(() => setLoading(false));
   };
   useEffect(load, [call]); // eslint-disable-line
 
@@ -3212,12 +3213,12 @@ function AccessReport({ can }) {
       <div className="card">
         <div className="register-toolbar">
           <h2 style={{ margin: 0 }}>User Access Report</h2>
-          <CustomExport rows={exportRows} dateField="date" filenameBase="user-access-report" printTitle="User Access Report" canExport={can("auditLog", "export")} buildSheets={(data) => ({ AccessLog: data.map((r) => ({ DateTime: stamp(r), User: r.user_label, Module: moduleLabel(r.module), Action: r.action })) })} printColumns={[{ label: "Date & Time", value: (r) => stamp(r) }, { label: "User", value: (r) => r.user_label }, { label: "Module", value: (r) => moduleLabel(r.module) }, { label: "Action", value: (r) => r.action }]} />
+          <CustomExport rows={exportRows} filters={filters} dateField="date" filenameBase="user-access-report" printTitle="User Access Report" canExport={can("auditLog", "export")} buildSheets={(data) => ({ AccessLog: data.map((r) => ({ DateTime: stamp(r), User: r.user_label, Module: moduleLabel(r.module), Action: r.action })) })} printColumns={[{ label: "Date & Time", value: (r) => stamp(r) }, { label: "User", value: (r) => r.user_label }, { label: "Module", value: (r) => moduleLabel(r.module) }, { label: "Action", value: (r) => r.action }]} />
         </div>
         <p style={{ fontSize: 12.5, color: "var(--ink-soft)", marginTop: -8 }}>Who accessed which module, and when — logged automatically as staff use the app.</p>
         <div className="form-grid" style={{ maxWidth: 340 }}>
-          <div><label>From</label><input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></div>
-          <div><label>To</label><input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></div>
+          <div><label>From</label><input type="date" value={filters.from} onChange={(e) => filters.setFrom(e.target.value)} /></div>
+          <div><label>To</label><input type="date" value={filters.to} onChange={(e) => filters.setTo(e.target.value)} /></div>
         </div>
         <button className="btn" type="button" onClick={load}>Apply range</button>
         <ErrorNote msg={err} />
