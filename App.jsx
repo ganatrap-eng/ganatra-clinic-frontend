@@ -136,6 +136,46 @@ function fuzzyText(haystack, needle) {
   return words.every((w) => h.includes(w));
 }
 
+/** Filter state shared by a report's on-screen register AND its Custom
+ *  view/export panel — one source of truth, so what you filter to on
+ *  screen is exactly what exports/prints, with no separate export-only
+ *  filter to keep in sync. */
+function useCustomViewFilters() {
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const [doctor, setDoctor] = useState("");
+  const [patient, setPatient] = useState("");
+  const [shift, setShift] = useState("");
+  const [amountMin, setAmountMin] = useState("");
+  const [amountMax, setAmountMax] = useState("");
+  const clear = () => { setFrom(""); setTo(""); setDoctor(""); setPatient(""); setShift(""); setAmountMin(""); setAmountMax(""); };
+  const activeCount = [from || to, doctor, patient.trim(), shift, amountMin !== "" || amountMax !== ""].filter(Boolean).length;
+  return { from, setFrom, to, setTo, doctor, setDoctor, patient, setPatient, shift, setShift, amountMin, setAmountMin, amountMax, setAmountMax, clear, activeCount };
+}
+
+/** Applies a useCustomViewFilters() state to a row array. Only the
+ *  dimensions the caller passes a field name for are applied — e.g. a
+ *  report with no doctorField never filters by doctor, even if a stray
+ *  doctor value were somehow set. */
+function applyCustomViewFilters(rows, f, { dateField, doctorField, patientField, shiftField, amountField } = {}) {
+  return rows.filter((r) => {
+    if (dateField) {
+      const d = r[dateField];
+      if (f.from && (!d || d < f.from)) return false;
+      if (f.to && (!d || d > f.to)) return false;
+    }
+    if (doctorField && f.doctor && r[doctorField] !== f.doctor) return false;
+    if (patientField && f.patient.trim() && !fuzzyText(r[patientField], f.patient)) return false;
+    if (shiftField && f.shift && r[shiftField] !== f.shift) return false;
+    if (amountField) {
+      const amt = Number(r[amountField] || 0);
+      if (f.amountMin !== "" && amt < Number(f.amountMin)) return false;
+      if (f.amountMax !== "" && amt > Number(f.amountMax)) return false;
+    }
+    return true;
+  });
+}
+
 /** Reusable column sorting: useSortableRows(rows, columns, defaultKey)
  *  takes a { key: accessorFn } map declared upfront (so sorting is correct
  *  from the very first render) and returns the sorted array plus a <Th>
@@ -241,55 +281,43 @@ function SlideOverPanel({ open, onClose, title, children }) {
  * Print both operate on the exact same filtered() result, so whatever
  * combination of filters is active is exactly what gets exported or printed.
  */
-function CustomExport({ rows, dateField, buildSheets, filenameBase, printTitle, printColumns, canExport = true, doctorField, patientField, shiftField, amountField }) {
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
-  const [doctorFilter, setDoctorFilter] = useState("");
-  const [patientFilter, setPatientFilter] = useState("");
-  const [shiftFilter, setShiftFilter] = useState("");
-  const [amountMin, setAmountMin] = useState("");
-  const [amountMax, setAmountMax] = useState("");
+/**
+ * Shared custom-view/export control used across every report register.
+ * The filter STATE now lives in the parent register (via useCustomViewFilters)
+ * and is applied to the on-screen table there too — this component only
+ * renders the filter UI and exports/prints exactly the `rows` it's given,
+ * so what's visible on screen, what's in the Excel file, and what prints
+ * are always the same filtered set. `allRows` (the unfiltered dataset) is
+ * only used to populate the Doctor/Shift dropdown OPTIONS, so choosing a
+ * filter never makes other valid options disappear from the dropdowns.
+ */
+function CustomExport({ rows, allRows, filters, dateField, buildSheets, filenameBase, printTitle, printColumns, canExport = true, doctorField, patientField, shiftField, amountField }) {
   const [open, setOpen] = useState(false);
 
   if (!canExport) return null;
 
-  const doctorOptions = doctorField ? [...new Set(rows.map((r) => r[doctorField]).filter(Boolean))].sort((a, b) => a.localeCompare(b)) : [];
-  const shiftOptions = shiftField ? [...new Set(rows.map((r) => r[shiftField]).filter(Boolean))].sort((a, b) => a.localeCompare(b)) : [];
-
-  const filtered = () => rows.filter((r) => {
-    const d = r[dateField];
-    if (from && (!d || d < from)) return false;
-    if (to && (!d || d > to)) return false;
-    if (doctorField && doctorFilter && r[doctorField] !== doctorFilter) return false;
-    if (patientField && patientFilter.trim() && !fuzzyText(r[patientField], patientFilter)) return false;
-    if (shiftField && shiftFilter && r[shiftField] !== shiftFilter) return false;
-    if (amountField) {
-      const amt = Number(r[amountField] || 0);
-      if (amountMin !== "" && amt < Number(amountMin)) return false;
-      if (amountMax !== "" && amt > Number(amountMax)) return false;
-    }
-    return true;
-  });
+  const optionSource = allRows || rows;
+  const doctorOptions = doctorField ? [...new Set(optionSource.map((r) => r[doctorField]).filter(Boolean))].sort((a, b) => a.localeCompare(b)) : [];
+  const shiftOptions = shiftField ? [...new Set(optionSource.map((r) => r[shiftField]).filter(Boolean))].sort((a, b) => a.localeCompare(b)) : [];
 
   const filterSummary = () => {
-    const parts = [from || to ? `${from || "start"} to ${to || "today"}` : "all dates"];
-    if (doctorField && doctorFilter) parts.push(`Doctor: ${doctorFilter}`);
-    if (patientField && patientFilter.trim()) parts.push(`Patient: "${patientFilter.trim()}"`);
-    if (shiftField && shiftFilter) parts.push(`Shift: ${shiftFilter}`);
-    if (amountField && (amountMin !== "" || amountMax !== "")) parts.push(`Amount: ${amountMin || "0"}–${amountMax || "no max"}`);
+    const parts = [filters.from || filters.to ? `${filters.from || "start"} to ${filters.to || "today"}` : "all dates"];
+    if (doctorField && filters.doctor) parts.push(`Doctor: ${filters.doctor}`);
+    if (patientField && filters.patient.trim()) parts.push(`Patient: "${filters.patient.trim()}"`);
+    if (shiftField && filters.shift) parts.push(`Shift: ${filters.shift}`);
+    if (amountField && (filters.amountMin !== "" || filters.amountMax !== "")) parts.push(`Amount: ${filters.amountMin || "0"}–${filters.amountMax || "no max"}`);
     return parts.join(" · ");
   };
 
-  const doExcel = () => exportExcel(filenameBase, buildSheets(filtered()));
+  const doExcel = () => exportExcel(filenameBase, buildSheets(rows));
 
   const doPrint = () => {
-    const data = filtered();
     const win = document.getElementById("print-root");
     if (!win) { window.print(); return; }
-    const rowsHtml = data.map((r) => `<tr>${printColumns.map((c) => `<td>${escapeHtml(c.value(r))}</td>`).join("")}</tr>`).join("");
+    const rowsHtml = rows.map((r) => `<tr>${printColumns.map((c) => `<td>${escapeHtml(c.value(r))}</td>`).join("")}</tr>`).join("");
     win.innerHTML = `
       <h2>${escapeHtml(printTitle)}</h2>
-      <p style="color:#5B6B69;font-size:12px;">${escapeHtml(filterSummary())} — ${data.length} record(s)</p>
+      <p style="color:#5B6B69;font-size:12px;">${escapeHtml(filterSummary())} — ${rows.length} record(s)</p>
       <table style="width:100%;border-collapse:collapse;font-size:12px;">
         <thead><tr>${printColumns.map((c) => `<th style="text-align:left;border-bottom:2px solid #C9A227;padding:5px 6px;">${escapeHtml(c.label)}</th>`).join("")}</tr></thead>
         <tbody>${rowsHtml}</tbody>
@@ -299,29 +327,27 @@ function CustomExport({ rows, dateField, buildSheets, filenameBase, printTitle, 
     setTimeout(() => { document.body.classList.remove("printing-custom"); win.innerHTML = ""; }, 300);
   };
 
-  const activeCount = [from || to, doctorField && doctorFilter, patientField && patientFilter.trim(), shiftField && shiftFilter, amountField && (amountMin !== "" || amountMax !== "")].filter(Boolean).length;
-
   return (
     <div className="custom-export no-print">
-      <button className="btn secondary small" type="button" onClick={() => setOpen((o) => !o)}>📅 Custom view / export{activeCount > 0 ? ` (${activeCount})` : ""}</button>
+      <button className="btn secondary small" type="button" onClick={() => setOpen((o) => !o)}>📅 Custom view / export{filters.activeCount > 0 ? ` (${filters.activeCount})` : ""}</button>
       {open && (
         <div className="custom-export-panel">
-          <div><label>From</label><input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></div>
-          <div><label>To</label><input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></div>
+          <div><label>From</label><input type="date" value={filters.from} onChange={(e) => filters.setFrom(e.target.value)} /></div>
+          <div><label>To</label><input type="date" value={filters.to} onChange={(e) => filters.setTo(e.target.value)} /></div>
           {doctorField && (
             <div><label>Doctor</label>
-              <select value={doctorFilter} onChange={(e) => setDoctorFilter(e.target.value)}>
+              <select value={filters.doctor} onChange={(e) => filters.setDoctor(e.target.value)}>
                 <option value="">All doctors</option>
                 {doctorOptions.map((d) => <option key={d} value={d}>{d}</option>)}
               </select>
             </div>
           )}
           {patientField && (
-            <div><label>Patient</label><input type="text" style={{ width: 140 }} placeholder="Name contains…" value={patientFilter} onChange={(e) => setPatientFilter(e.target.value)} /></div>
+            <div><label>Patient</label><input type="text" style={{ width: 140 }} placeholder="Name contains…" value={filters.patient} onChange={(e) => filters.setPatient(e.target.value)} /></div>
           )}
           {shiftField && (
             <div><label>Shift</label>
-              <select value={shiftFilter} onChange={(e) => setShiftFilter(e.target.value)}>
+              <select value={filters.shift} onChange={(e) => filters.setShift(e.target.value)}>
                 <option value="">All shifts</option>
                 {shiftOptions.map((s) => <option key={s} value={s}>{s}</option>)}
               </select>
@@ -329,10 +355,11 @@ function CustomExport({ rows, dateField, buildSheets, filenameBase, printTitle, 
           )}
           {amountField && (
             <>
-              <div><label>Min amount (₹)</label><input type="number" style={{ width: 90 }} value={amountMin} onChange={(e) => setAmountMin(e.target.value)} /></div>
-              <div><label>Max amount (₹)</label><input type="number" style={{ width: 90 }} value={amountMax} onChange={(e) => setAmountMax(e.target.value)} /></div>
+              <div><label>Min amount (₹)</label><input type="number" style={{ width: 90 }} value={filters.amountMin} onChange={(e) => filters.setAmountMin(e.target.value)} /></div>
+              <div><label>Max amount (₹)</label><input type="number" style={{ width: 90 }} value={filters.amountMax} onChange={(e) => filters.setAmountMax(e.target.value)} /></div>
             </>
           )}
+          {filters.activeCount > 0 && <button className="btn secondary small" type="button" onClick={filters.clear}>✕ Clear filters</button>}
           <button className="btn small" type="button" onClick={doExcel}>⬇ Excel</button>
           <button className="btn small" type="button" onClick={doPrint}>⎙ PDF</button>
         </div>
@@ -1948,8 +1975,14 @@ function CaseRecords({ cases, addCase, updateCase, removeCase, doctors, patients
   const filteredCases = registerQuery.trim()
     ? cases.filter((c) => fuzzyText(c.patientName, registerQuery) || c.caseNo.toLowerCase().includes(registerQuery.toLowerCase()) || fuzzyText(c.briefHistory, registerQuery))
     : cases;
-  const caseColumns = { caseNo: (c) => c.caseNo, date: (c) => c.date, patientName: (c) => c.patientName, doctorName: (c) => c.doctorName || "", shift: (c) => c.shift || "", briefHistory: (c) => c.briefHistory || "", medValue: (c) => medValue(c) };
-  const { sorted: sortedCases, Th: CaseTh } = useSortableRows(filteredCases, caseColumns, "date", "desc");
+  const viewFilters = useCustomViewFilters();
+  const casesInView = applyCustomViewFilters(
+    filteredCases.map((c) => ({ ...c, medValue: medValue(c) })),
+    viewFilters,
+    { dateField: "date", doctorField: "doctorName", patientField: "patientName", shiftField: "shift", amountField: "medValue" }
+  );
+  const caseColumns = { caseNo: (c) => c.caseNo, date: (c) => c.date, patientName: (c) => c.patientName, doctorName: (c) => c.doctorName || "", shift: (c) => c.shift || "", briefHistory: (c) => c.briefHistory || "", medValue: (c) => c.medValue };
+  const { sorted: sortedCases, Th: CaseTh } = useSortableRows(casesInView, caseColumns, "date", "desc");
 
   // ---- Bulk upload: download a template, then parse a filled-in copy ----
   const TEMPLATE_HEADERS = ["Date (YYYY-MM-DD)", "Patient Name", "Phone", "Doctor", "Shift (Morning/Evening)", "Brief Medical History", "Medicine Name", "Quantity", "Indicative Unit Price", "Amount Due (₹, optional)", "Mode of Payment (Cash/UPI/Card/Other, optional)"];
@@ -2104,9 +2137,9 @@ function CaseRecords({ cases, addCase, updateCase, removeCase, doctors, patients
       </SlideOverPanel>
       <div className="card">
         <div className="register-toolbar">
-          <h2 style={{ margin: 0 }}>Case register ({sortedCases.length}{registerQuery.trim() ? ` of ${cases.length}` : ""})</h2>
+          <h2 style={{ margin: 0 }}>Case register ({sortedCases.length} of {cases.length})</h2>
           {can("cases", "write") && <button className="btn" type="button" onClick={openAdd}>+ Add case record</button>}
-          <CustomExport rows={sortedCases.map((c) => ({ ...c, amount: medValue(c) }))} dateField="date" doctorField="doctorName" patientField="patientName" shiftField="shift" amountField="amount" filenameBase="case-records" printTitle="Case Records" canExport={can("cases", "export")} buildSheets={(rows) => ({ Cases: rows.map((c) => ({ CaseNo: c.caseNo, Date: c.date, Patient: c.patientName, Phone: c.phone, Doctor: c.doctorName, Shift: c.shift, History: c.briefHistory, ExternalPrescription: c.externalPrescription, MedicinesDispensedValue: medValue(c) })) })} printColumns={[{ label: "Case No.", value: (c) => c.caseNo }, { label: "Date", value: (c) => c.date }, { label: "Patient", value: (c) => c.patientName }, { label: "Doctor", value: (c) => c.doctorName }, { label: "Shift", value: (c) => c.shift }, { label: "History", value: (c) => c.briefHistory }]} />
+          <CustomExport rows={sortedCases} allRows={cases.map((c) => ({ ...c, medValue: medValue(c) }))} filters={viewFilters} dateField="date" doctorField="doctorName" patientField="patientName" shiftField="shift" amountField="medValue" filenameBase="case-records" printTitle="Case Records" canExport={can("cases", "export")} buildSheets={(rows) => ({ Cases: rows.map((c) => ({ CaseNo: c.caseNo, Date: c.date, Patient: c.patientName, Phone: c.phone, Doctor: c.doctorName, Shift: c.shift, History: c.briefHistory, ExternalPrescription: c.externalPrescription, MedicinesDispensedValue: c.medValue })) })} printColumns={[{ label: "Case No.", value: (c) => c.caseNo }, { label: "Date", value: (c) => c.date }, { label: "Patient", value: (c) => c.patientName }, { label: "Doctor", value: (c) => c.doctorName }, { label: "Shift", value: (c) => c.shift }, { label: "History", value: (c) => c.briefHistory }]} />
         </div>
         <input type="text" value={registerQuery} onChange={(e) => setRegisterQuery(e.target.value)} placeholder="Search by patient name, case no., or history" style={{ width: "100%", maxWidth: 360, marginBottom: 12 }} />
         {cases.length === 0 ? <div className="empty">No case papers recorded yet.</div> : (
@@ -2506,6 +2539,8 @@ function Collections({ collections, addCollection, updateCollection, removeColle
   const filteredCollections = registerQuery.trim()
     ? collections.filter((c) => fuzzyText(c.patientName, registerQuery) || (c.caseNo || "").toLowerCase().includes(registerQuery.toLowerCase()))
     : collections;
+  const viewFilters = useCustomViewFilters();
+  const collectionsInView = applyCustomViewFilters(filteredCollections.map(enrichCollection), viewFilters, { dateField: "date", doctorField: "doctorName", patientField: "patientName", shiftField: "shift", amountField: "amountCollected" });
 
   // ---- Cases with no Collections entry yet — find them and let staff book them, one at a time or all at once ----
   const linkedCaseIds = useMemo(() => new Set(collections.map((c) => c.caseId).filter(Boolean)), [collections]);
@@ -2605,15 +2640,15 @@ function Collections({ collections, addCollection, updateCollection, removeColle
 
       <div className="card">
         <div className="register-toolbar">
-          <h2 style={{ margin: 0 }}>Collection register ({filteredCollections.length}{registerQuery.trim() ? ` of ${collections.length}` : ""})</h2>
+          <h2 style={{ margin: 0 }}>Collection register ({collectionsInView.length} of {collections.length})</h2>
           {can("collections", "write") && <button className="btn" type="button" onClick={openAdd}>+ Add collection entry</button>}
-          <CustomExport rows={filteredCollections.map(enrichCollection)} dateField="date" doctorField="doctorName" patientField="patientName" shiftField="shift" amountField="amountCollected" filenameBase="collections" printTitle="Collections" canExport={can("collections", "export")} buildSheets={(rows) => ({ Collections: rows, Daily: rollups.daily, Weekly: rollups.weekly, Monthly: rollups.monthly })} printColumns={[{ label: "Date", value: (r) => r.date }, { label: "Case No.", value: (r) => r.caseNo }, { label: "Patient", value: (r) => r.patientName }, { label: "Doctor", value: (r) => r.doctorName }, { label: "Shift", value: (r) => r.shift }, { label: "Due", value: (r) => inr(r.amountDue) }, { label: "Collected", value: (r) => inr(r.amountCollected) }, { label: "Balance", value: (r) => inr(r.balance) }]} />
+          <CustomExport rows={collectionsInView} allRows={collections.map(enrichCollection)} filters={viewFilters} dateField="date" doctorField="doctorName" patientField="patientName" shiftField="shift" amountField="amountCollected" filenameBase="collections" printTitle="Collections" canExport={can("collections", "export")} buildSheets={(rows) => ({ Collections: rows, Daily: rollups.daily, Weekly: rollups.weekly, Monthly: rollups.monthly })} printColumns={[{ label: "Date", value: (r) => r.date }, { label: "Case No.", value: (r) => r.caseNo }, { label: "Patient", value: (r) => r.patientName }, { label: "Doctor", value: (r) => r.doctorName }, { label: "Shift", value: (r) => r.shift }, { label: "Due", value: (r) => inr(r.amountDue) }, { label: "Collected", value: (r) => inr(r.amountCollected) }, { label: "Balance", value: (r) => inr(r.balance) }]} />
         </div>
         <input type="text" value={registerQuery} onChange={(e) => setRegisterQuery(e.target.value)} placeholder="Search by patient name or case no." style={{ width: "100%", maxWidth: 360, marginBottom: 12 }} />
-        {filteredCollections.length === 0 ? <div className="empty">No collections match.</div> : (
+        {collectionsInView.length === 0 ? <div className="empty">No collections match.</div> : (
           <table>
             <thead><tr><th>Date</th><th>Case No.</th><th>Patient</th><th>Phone</th><th className="num">Due</th><th className="num">Collected</th><th className="num">Balance</th><th>Mode</th><th></th></tr></thead>
-            <tbody>{[...filteredCollections].sort((a, b) => (a.date < b.date ? 1 : -1)).map((c) => {
+            <tbody>{[...collectionsInView].sort((a, b) => (a.date < b.date ? 1 : -1)).map((c) => {
               const pending = !c.mode && Number(c.amountDue || 0) === 0 && Number(c.amountCollected || 0) === 0;
               return (
               <tr key={c.id} data-row-id={c.id} className={highlightId === c.id ? "row-highlight" : undefined} style={pending ? { background: "#FFF8E8" } : undefined}><td>{c.date}</td><td>{c.caseNo || "—"}</td><td>{c.patientName}</td><td>{c.phone}</td>
@@ -2623,7 +2658,7 @@ function Collections({ collections, addCollection, updateCollection, removeColle
             );})}</tbody>
           </table>
         )}
-        {can("collections", "export") && <div className="note-box">Leave both dates blank in "Custom range export" and it exports every collection on record — a full downloadable database, not just a date range.</div>}
+        {can("collections", "export") && <div className="note-box">"Custom view / export" filters the register above too — leave all fields blank to see and export every collection on record.</div>}
       </div>
       <div className="card">
         <h2>Daily / weekly / monthly collection — FY {fy}</h2>
@@ -2656,6 +2691,8 @@ function DoctorShifts({ doctors, addDoctor, updateDoctor, removeDoctor, doctorPa
   const [p, setP] = useState({ date: todayISO(), doctorId: "", amount: "" });
   const [err, setErr] = useState(""); const [busy, setBusy] = useState(false);
   const [last14, setLast14] = useState([]);
+  const payFilters = useCustomViewFilters();
+  const payInView = applyCustomViewFilters(doctorPays, payFilters, { dateField: "date", doctorField: "doctorName", amountField: "amount" });
 
   useEffect(() => {
     const to = todayISO(); const fromD = new Date(); fromD.setDate(fromD.getDate() - 13);
@@ -2736,12 +2773,12 @@ function DoctorShifts({ doctors, addDoctor, updateDoctor, removeDoctor, doctorPa
       </SlideOverPanel>
       <div className="card">
         <div className="register-toolbar">
-          <h2 style={{ margin: 0 }}>Pay entries</h2>
+          <h2 style={{ margin: 0 }}>Pay entries ({payInView.length} of {doctorPays.length})</h2>
           {can("doctorPay", "write") && <button className="btn" type="button" onClick={openAddPay}>+ Log pay entry</button>}
-          <CustomExport rows={doctorPays} dateField="date" doctorField="doctorName" amountField="amount" filenameBase="doctor-pay" printTitle="Doctor Shifts & Pay" canExport={can("doctorPay", "export")} buildSheets={(rows) => ({ DoctorPay: rows.map((x) => ({ Date: x.date, Doctor: x.doctorName, Amount: x.amount })) })} printColumns={[{ label: "Date", value: (x) => x.date }, { label: "Doctor", value: (x) => x.doctorName }, { label: "Amount", value: (x) => inr(x.amount) }]} />
+          <CustomExport rows={payInView} allRows={doctorPays} filters={payFilters} dateField="date" doctorField="doctorName" amountField="amount" filenameBase="doctor-pay" printTitle="Doctor Shifts & Pay" canExport={can("doctorPay", "export")} buildSheets={(rows) => ({ DoctorPay: rows.map((x) => ({ Date: x.date, Doctor: x.doctorName, Amount: x.amount })) })} printColumns={[{ label: "Date", value: (x) => x.date }, { label: "Doctor", value: (x) => x.doctorName }, { label: "Amount", value: (x) => inr(x.amount) }]} />
         </div>
         <table style={{ marginTop: 14 }}><thead><tr><th>Date</th><th>Doctor</th><th className="num">Amount</th><th></th></tr></thead>
-          <tbody>{[...doctorPays].sort((a, b) => (a.date < b.date ? 1 : -1)).map((x) => (<tr key={x.id}><td>{x.date}</td><td>{x.doctorName}</td><td className="num">{inr(x.amount)}</td><td style={{ display: "flex", gap: 6 }}>{can("doctorPay", "edit") && <button className="btn secondary small" type="button" onClick={() => startEditPay(x)}>Edit</button>}{can("doctorPay", "delete") && <button className="btn danger small" type="button" onClick={() => delPay(x.id)}>Delete</button>}</td></tr>))}</tbody>
+          <tbody>{[...payInView].sort((a, b) => (a.date < b.date ? 1 : -1)).map((x) => (<tr key={x.id}><td>{x.date}</td><td>{x.doctorName}</td><td className="num">{inr(x.amount)}</td><td style={{ display: "flex", gap: 6 }}>{can("doctorPay", "edit") && <button className="btn secondary small" type="button" onClick={() => startEditPay(x)}>Edit</button>}{can("doctorPay", "delete") && <button className="btn danger small" type="button" onClick={() => delPay(x.id)}>Delete</button>}</td></tr>))}</tbody>
         </table>
       </div>
       <div className="card">
@@ -2781,6 +2818,8 @@ function Referrals({ referrals, addReferral, updateReferral, removeReferral, fy,
   const remove = async (id) => { try { await removeReferral(id); if (editingId === id) cancelEdit(); } catch (e) { setErr(e.message); } };
   const range = fyRange(fy);
   const total = referrals.filter((r) => r.date >= range.start && r.date <= range.end).reduce((a, r) => a + r.amount, 0);
+  const viewFilters = useCustomViewFilters();
+  const referralsInView = applyCustomViewFilters(referrals, viewFilters, { dateField: "date", patientField: "patientName", amountField: "amount" });
   return (
     <div>
       <SlideOverPanel open={panelOpen} onClose={cancelEdit} title={editingId ? "Edit referral" : "New referral"}>
@@ -2800,13 +2839,13 @@ function Referrals({ referrals, addReferral, updateReferral, removeReferral, fy,
       </SlideOverPanel>
       <div className="card">
         <div className="register-toolbar">
-          <h2 style={{ margin: 0 }}>Referral income — FY {fy} total: {inr(total)}</h2>
+          <h2 style={{ margin: 0 }}>Referral income — FY {fy} total: {inr(total)} ({referralsInView.length} of {referrals.length} shown)</h2>
           {can("referrals", "write") && <button className="btn" type="button" onClick={openAdd}>+ Add referral</button>}
-          <CustomExport rows={referrals} dateField="date" patientField="patientName" amountField="amount" filenameBase="referral-income" printTitle="Referral Income" canExport={can("referrals", "export")} buildSheets={(rows) => ({ Referrals: rows })} printColumns={[{ label: "Date", value: (r) => r.date }, { label: "Patient", value: (r) => r.patientName }, { label: "Type", value: (r) => r.referralType }, { label: "Referred To", value: (r) => r.referredTo }, { label: "Amount", value: (r) => inr(r.amount) }]} />
+          <CustomExport rows={referralsInView} allRows={referrals} filters={viewFilters} dateField="date" patientField="patientName" amountField="amount" filenameBase="referral-income" printTitle="Referral Income" canExport={can("referrals", "export")} buildSheets={(rows) => ({ Referrals: rows })} printColumns={[{ label: "Date", value: (r) => r.date }, { label: "Patient", value: (r) => r.patientName }, { label: "Type", value: (r) => r.referralType }, { label: "Referred To", value: (r) => r.referredTo }, { label: "Amount", value: (r) => inr(r.amount) }]} />
         </div>
-        {referrals.length === 0 ? <div className="empty">No referrals recorded yet.</div> : (
+        {referralsInView.length === 0 ? <div className="empty">No referrals match.</div> : (
           <table><thead><tr><th>Date</th><th>Patient</th><th>Type</th><th>Referred To</th><th className="num">Amount</th><th>Notes</th><th></th></tr></thead>
-            <tbody>{[...referrals].sort((a, b) => (a.date < b.date ? 1 : -1)).map((r) => (<tr key={r.id}><td>{r.date}</td><td>{r.patientName}</td><td>{r.referralType}</td><td>{r.referredTo}</td><td className="num">{inr(r.amount)}</td><td>{r.notes}</td><td style={{ display: "flex", gap: 6 }}>{can("referrals", "edit") && <button className="btn secondary small" type="button" onClick={() => startEdit(r)}>Edit</button>}{can("referrals", "delete") && <button className="btn danger small" type="button" onClick={() => remove(r.id)}>Delete</button>}</td></tr>))}</tbody>
+            <tbody>{[...referralsInView].sort((a, b) => (a.date < b.date ? 1 : -1)).map((r) => (<tr key={r.id}><td>{r.date}</td><td>{r.patientName}</td><td>{r.referralType}</td><td>{r.referredTo}</td><td className="num">{inr(r.amount)}</td><td>{r.notes}</td><td style={{ display: "flex", gap: 6 }}>{can("referrals", "edit") && <button className="btn secondary small" type="button" onClick={() => startEdit(r)}>Edit</button>}{can("referrals", "delete") && <button className="btn danger small" type="button" onClick={() => remove(r.id)}>Delete</button>}</td></tr>))}</tbody>
           </table>
         )}
       </div>
@@ -2835,6 +2874,8 @@ function Gifts({ gifts, addGift, updateGift, removeGift, doctors, can }) {
     setBusy(false);
   };
   const remove = async (id) => { try { await removeGift(id); if (editingId === id) cancelEdit(); } catch (e) { setErr(e.message); } };
+  const viewFilters = useCustomViewFilters();
+  const giftsInView = applyCustomViewFilters(gifts, viewFilters, { dateField: "date", doctorField: "doctorName", amountField: "amount" });
   return (
     <div>
       <SlideOverPanel open={panelOpen} onClose={cancelEdit} title={editingId ? "Edit gift entry" : "Log a gift received"}>
@@ -2855,13 +2896,13 @@ function Gifts({ gifts, addGift, updateGift, removeGift, doctors, can }) {
       </SlideOverPanel>
       <div className="card">
         <div className="register-toolbar">
-          <h2 style={{ margin: 0 }}>Gifts register</h2>
+          <h2 style={{ margin: 0 }}>Gifts register ({giftsInView.length} of {gifts.length})</h2>
           {can("gifts", "write") && <button className="btn" type="button" onClick={openAdd}>+ Log a gift</button>}
-          <CustomExport rows={gifts} dateField="date" doctorField="doctorName" amountField="amount" filenameBase="gifts-register" printTitle="Gifts Register" canExport={can("gifts", "export")} buildSheets={(rows) => ({ Gifts: rows.map((g) => ({ Date: g.date, Rep: g.repName, Company: g.company, Gift: g.gift, Doctor: g.doctorName, Amount: g.amount })) })} printColumns={[{ label: "Date", value: (g) => g.date }, { label: "Rep", value: (g) => g.repName }, { label: "Company", value: (g) => g.company }, { label: "Gift", value: (g) => g.gift }, { label: "Doctor", value: (g) => g.doctorName }, { label: "Amount", value: (g) => (g.amount ? inr(g.amount) : "—") }]} />
+          <CustomExport rows={giftsInView} allRows={gifts} filters={viewFilters} dateField="date" doctorField="doctorName" amountField="amount" filenameBase="gifts-register" printTitle="Gifts Register" canExport={can("gifts", "export")} buildSheets={(rows) => ({ Gifts: rows.map((g) => ({ Date: g.date, Rep: g.repName, Company: g.company, Gift: g.gift, Doctor: g.doctorName, Amount: g.amount })) })} printColumns={[{ label: "Date", value: (g) => g.date }, { label: "Rep", value: (g) => g.repName }, { label: "Company", value: (g) => g.company }, { label: "Gift", value: (g) => g.gift }, { label: "Doctor", value: (g) => g.doctorName }, { label: "Amount", value: (g) => (g.amount ? inr(g.amount) : "—") }]} />
         </div>
-        {gifts.length === 0 ? <div className="empty">No entries yet.</div> : (
+        {giftsInView.length === 0 ? <div className="empty">No entries match.</div> : (
           <table><thead><tr><th>Date</th><th>Rep</th><th>Company</th><th>Gift</th><th>Doctor</th><th className="num">Amount</th><th></th></tr></thead>
-            <tbody>{[...gifts].sort((a, b) => (a.date < b.date ? 1 : -1)).map((g) => (<tr key={g.id}><td>{g.date}</td><td>{g.repName}</td><td>{g.company}</td><td>{g.gift}</td><td>{g.doctorName || "—"}</td><td className="num">{g.amount ? inr(g.amount) : "—"}</td><td style={{ display: "flex", gap: 6 }}>{can("gifts", "edit") && <button className="btn secondary small" type="button" onClick={() => startEdit(g)}>Edit</button>}{can("gifts", "delete") && <button className="btn danger small" type="button" onClick={() => remove(g.id)}>Delete</button>}</td></tr>))}</tbody>
+            <tbody>{[...giftsInView].sort((a, b) => (a.date < b.date ? 1 : -1)).map((g) => (<tr key={g.id}><td>{g.date}</td><td>{g.repName}</td><td>{g.company}</td><td>{g.gift}</td><td>{g.doctorName || "—"}</td><td className="num">{g.amount ? inr(g.amount) : "—"}</td><td style={{ display: "flex", gap: 6 }}>{can("gifts", "edit") && <button className="btn secondary small" type="button" onClick={() => startEdit(g)}>Edit</button>}{can("gifts", "delete") && <button className="btn danger small" type="button" onClick={() => remove(g.id)}>Delete</button>}</td></tr>))}</tbody>
           </table>
         )}
       </div>
@@ -2896,6 +2937,8 @@ function Expenses({ expenses, addExpense, updateExpense, removeExpense, fy, pend
   const filteredExpenses = registerQuery.trim()
     ? expenses.filter((e) => fuzzyText(e.narration, registerQuery) || e.category.toLowerCase().includes(registerQuery.toLowerCase()))
     : expenses;
+  const viewFilters = useCustomViewFilters();
+  const expensesInView = applyCustomViewFilters(filteredExpenses, viewFilters, { dateField: "date", amountField: "amount" });
   const range = fyRange(fy);
   const inFY = expenses.filter((e) => e.date >= range.start && e.date <= range.end);
   const byCat = {}; inFY.forEach((e) => { byCat[e.category] = (byCat[e.category] || 0) + e.amount; });
@@ -2922,14 +2965,14 @@ function Expenses({ expenses, addExpense, updateExpense, removeExpense, fy, pend
       </div>
       <div className="card">
         <div className="register-toolbar">
-          <h2 style={{ margin: 0 }}>All expense entries ({filteredExpenses.length}{registerQuery.trim() ? ` of ${expenses.length}` : ""})</h2>
+          <h2 style={{ margin: 0 }}>All expense entries ({expensesInView.length} of {expenses.length})</h2>
           {can("expenses", "write") && <button className="btn" type="button" onClick={openAdd}>+ Add expense</button>}
-          <CustomExport rows={filteredExpenses} dateField="date" amountField="amount" filenameBase="expenses" printTitle="Expenses" canExport={can("expenses", "export")} buildSheets={(rows) => ({ Expenses: rows, CategoryTotals: EXPENSE_CATEGORIES.map((c) => ({ Category: c, Amount: rows.filter((r) => r.category === c).reduce((s, r) => s + r.amount, 0) })) })} printColumns={[{ label: "Date", value: (e) => e.date }, { label: "Category", value: (e) => e.category }, { label: "Narration", value: (e) => e.narration }, { label: "Amount", value: (e) => inr(e.amount) }]} />
+          <CustomExport rows={expensesInView} allRows={expenses} filters={viewFilters} dateField="date" amountField="amount" filenameBase="expenses" printTitle="Expenses" canExport={can("expenses", "export")} buildSheets={(rows) => ({ Expenses: rows, CategoryTotals: EXPENSE_CATEGORIES.map((c) => ({ Category: c, Amount: rows.filter((r) => r.category === c).reduce((s, r) => s + r.amount, 0) })) })} printColumns={[{ label: "Date", value: (e) => e.date }, { label: "Category", value: (e) => e.category }, { label: "Narration", value: (e) => e.narration }, { label: "Amount", value: (e) => inr(e.amount) }]} />
         </div>
         <input type="text" value={registerQuery} onChange={(e) => setRegisterQuery(e.target.value)} placeholder="Search by narration or category" style={{ width: "100%", maxWidth: 360, marginBottom: 12 }} />
-        {filteredExpenses.length === 0 ? <div className="empty">{registerQuery.trim() ? "No expenses match that search." : "No expenses logged yet."}</div> : (
+        {expensesInView.length === 0 ? <div className="empty">No expenses match.</div> : (
           <table><thead><tr><th>Date</th><th>Category</th><th>Narration</th><th className="num">Amount</th><th>Photo</th><th></th></tr></thead>
-            <tbody>{[...filteredExpenses].sort((a, b) => (a.date < b.date ? 1 : -1)).map((e) => (<tr key={e.id} data-row-id={e.id} className={highlightId === e.id ? "row-highlight" : undefined}><td>{e.date}</td><td>{e.category}</td><td>{e.narration}</td><td className="num">{inr(e.amount)}</td><td>{e.image ? "📎" : "—"}</td><td style={{ display: "flex", gap: 6 }}>{can("expenses", "edit") && <button className="btn secondary small" type="button" onClick={() => startEdit(e)}>Edit</button>}{can("expenses", "delete") && <button className="btn danger small" type="button" onClick={() => remove(e.id)}>Delete</button>}</td></tr>))}</tbody>
+            <tbody>{[...expensesInView].sort((a, b) => (a.date < b.date ? 1 : -1)).map((e) => (<tr key={e.id} data-row-id={e.id} className={highlightId === e.id ? "row-highlight" : undefined}><td>{e.date}</td><td>{e.category}</td><td>{e.narration}</td><td className="num">{inr(e.amount)}</td><td>{e.image ? "📎" : "—"}</td><td style={{ display: "flex", gap: 6 }}>{can("expenses", "edit") && <button className="btn secondary small" type="button" onClick={() => startEdit(e)}>Edit</button>}{can("expenses", "delete") && <button className="btn danger small" type="button" onClick={() => remove(e.id)}>Delete</button>}</td></tr>))}</tbody>
           </table>
         )}
       </div>
@@ -2945,6 +2988,8 @@ function FixedAssets({ assets, addAsset, updateAsset, removeAsset, fy, can }) {
   const [dep, setDep] = useState({ rows: [], totalDep: 0 });
 
   useEffect(() => { call(`/assets/depreciation?fy=${fy}`).then((d) => setDep({ rows: (d.rows || []).map((r) => ({ ...mapAsset(r), ...r })), totalDep: Number(d.totalDep) })).catch(() => {}); }, [call, fy, assets]);
+  const assetFilters = useCustomViewFilters();
+  const depInView = applyCustomViewFilters(dep.rows.map((r) => ({ ...r, amount: r.cost })), assetFilters, { dateField: "purchaseDate", amountField: "amount" });
 
   const [editingId, setEditingId] = useState(null);
   const [panelOpen, setPanelOpen] = useState(false);
@@ -2982,14 +3027,14 @@ function FixedAssets({ assets, addAsset, updateAsset, removeAsset, fy, can }) {
       </SlideOverPanel>
       <div className="card">
         <div className="register-toolbar">
-          <h2 style={{ margin: 0 }}>Depreciation register — FY {fy}</h2>
+          <h2 style={{ margin: 0 }}>Depreciation register — FY {fy} ({depInView.length} of {dep.rows.length})</h2>
           {can("assets", "write") && <button className="btn" type="button" onClick={openAdd}>+ Add asset</button>}
-          <CustomExport rows={dep.rows.map((r) => ({ ...r, amount: r.cost }))} dateField="purchaseDate" amountField="amount" filenameBase="fixed-assets" printTitle="Fixed Assets — Depreciation Register" canExport={can("assets", "export")} buildSheets={(rows) => ({ DepreciationFY: rows.map((r) => ({ Asset: r.name, Block: r.block, Rate: r.rate, Cost: r.cost, OpeningWDV: r.applicable ? r.wdvStart : 0, Depreciation: r.applicable ? r.dep : 0, ClosingWDV: r.applicable ? r.wdvEnd : 0 })) })} printColumns={[{ label: "Asset", value: (r) => r.name }, { label: "Block", value: (r) => r.block }, { label: "Cost", value: (r) => inr(r.cost) }, { label: "Depreciation", value: (r) => (r.applicable ? inr(r.dep) : "—") }, { label: "Closing WDV", value: (r) => (r.applicable ? inr(r.wdvEnd) : "—") }]} />
+          <CustomExport rows={depInView} allRows={dep.rows.map((r) => ({ ...r, amount: r.cost }))} filters={assetFilters} dateField="purchaseDate" amountField="amount" filenameBase="fixed-assets" printTitle="Fixed Assets — Depreciation Register" canExport={can("assets", "export")} buildSheets={(rows) => ({ DepreciationFY: rows.map((r) => ({ Asset: r.name, Block: r.block, Rate: r.rate, Cost: r.cost, OpeningWDV: r.applicable ? r.wdvStart : 0, Depreciation: r.applicable ? r.dep : 0, ClosingWDV: r.applicable ? r.wdvEnd : 0 })) })} printColumns={[{ label: "Asset", value: (r) => r.name }, { label: "Block", value: (r) => r.block }, { label: "Cost", value: (r) => inr(r.cost) }, { label: "Depreciation", value: (r) => (r.applicable ? inr(r.dep) : "—") }, { label: "Closing WDV", value: (r) => (r.applicable ? inr(r.wdvEnd) : "—") }]} />
         </div>
-        {dep.rows.length === 0 ? <div className="empty">No fixed assets on the register yet.</div> : (
+        {depInView.length === 0 ? <div className="empty">No fixed assets match.</div> : (
           <table>
             <thead><tr><th>Asset</th><th>Block</th><th className="num">Rate</th><th className="num">Cost</th><th className="num">Opening WDV</th><th className="num">Depreciation</th><th className="num">Closing WDV</th><th></th></tr></thead>
-            <tbody>{dep.rows.map((r) => (
+            <tbody>{depInView.map((r) => (
               <tr key={r.id}><td>{r.name}</td><td>{r.block}</td><td className="num">{r.rate}%</td><td className="num">{inr(r.cost)}</td>
                 <td className="num">{r.applicable ? inr(r.wdvStart) : "—"}</td><td className="num">{r.applicable ? inr(r.dep) : "—"}</td><td className="num">{r.applicable ? inr(r.wdvEnd) : "—"}</td>
                 <td style={{ display: "flex", gap: 6 }}>{can("assets", "edit") && <button className="btn secondary small" type="button" onClick={() => startEdit(r)}>Edit</button>}{can("assets", "delete") && <button className="btn danger small" type="button" onClick={() => remove(r.id)}>Delete</button>}</td></tr>
