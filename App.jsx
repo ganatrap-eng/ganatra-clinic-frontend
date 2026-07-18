@@ -3251,10 +3251,15 @@ function AccessReport({ can }) {
   };
   useEffect(load, [call]); // eslint-disable-line
 
-  const moduleLabel = (m) => PERMISSION_MODULES.find((x) => x.key === m)?.label || m;
+  // A few audit-log entries come from actions that aren't gated by the
+  // permission matrix (logging in, admin approvals, clinic settings) — give
+  // them a readable label too instead of falling back to the raw key.
+  const AUDIT_ONLY_LABELS = { auth: "Login", admin: "User Approvals", settings: "Clinic Settings" };
+  const moduleLabel = (m) => PERMISSION_MODULES.find((x) => x.key === m)?.label || AUDIT_ONLY_LABELS[m] || m;
   const stamp = (r) => new Date(r.created_at).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" });
 
   const actionOptions = [...new Set(rows.map((r) => r.action).filter(Boolean))].sort();
+  const moduleOptions = [...new Set(rows.map((r) => r.module).filter(Boolean))].sort((a, b) => moduleLabel(a).localeCompare(moduleLabel(b)));
   const visibleRows = rows.filter((r) =>
     (!userQuery.trim() || fuzzyText(r.user_label, userQuery)) &&
     (!moduleFilter || r.module === moduleFilter) &&
@@ -3281,7 +3286,7 @@ function AccessReport({ can }) {
           <div><label>Search Module</label>
             <select value={moduleFilter} onChange={(e) => setModuleFilter(e.target.value)}>
               <option value="">All modules</option>
-              {PERMISSION_MODULES.map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
+              {moduleOptions.map((m) => <option key={m} value={m}>{moduleLabel(m)}</option>)}
             </select>
           </div>
           <div><label>Search Action</label>
