@@ -858,6 +858,8 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [view, setView] = useState("launcher");
+  const [navOpen, setNavOpen] = useState(false);
+  const goto = (key) => { setView(key); setNavOpen(false); };
   const [pendingSearch, setPendingSearch] = useState(null);
   const clearPendingSearch = useCallback(() => setPendingSearch(null), []);
   const [fy, setFy] = useState(fyOf(todayISO()));
@@ -1154,12 +1156,34 @@ export default function App() {
           @keyframes sofade{from{opacity:0;}to{opacity:1;}}
           .register-toolbar{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px;}
           .info{font-size:12px;color:var(--income);background:#e3efe6;padding:8px 10px;border-radius:6px;margin-top:8px;}
+          .mobile-nav-toggle{display:none;}
+          .nav-backdrop{display:none;}
           @media (max-width:820px){
-            .app-root{flex-direction:column;} .sidebar{width:100%;flex-direction:row;flex-wrap:wrap;padding:14px 12px;align-items:center;}
-            .sidebar .brand{padding:0 10px 0 0;font-size:17px;} .sidebar .biz{display:none;}
-            .nav-item{padding:7px 9px;font-size:11.5px;border-left:none;border-bottom:3px solid transparent;}
-            .nav-item.active{border-left:none;border-bottom-color:var(--accent);} .logout{margin-top:0;margin-left:auto;padding:8px 10px;}
-            .content{padding:16px 12px 50px;}
+            .app-root{flex-direction:column;}
+            .mobile-nav-toggle{display:flex;align-items:center;justify-content:center;position:fixed;top:14px;left:14px;z-index:50;
+              width:40px;height:40px;border-radius:10px;border:none;background:var(--primary-dark);color:#fff;font-size:18px;cursor:pointer;box-shadow:0 3px 10px rgba(0,0,0,.25);}
+            .nav-backdrop.open{display:block;position:fixed;inset:0;background:rgba(10,20,20,.45);z-index:44;}
+            .sidebar{position:fixed;top:0;left:0;bottom:0;z-index:45;width:250px;max-width:82vw;
+              flex-direction:column;flex-wrap:nowrap;padding:22px 0;overflow-y:auto;
+              transform:translateX(-105%);transition:transform .22s ease;box-shadow:6px 0 24px rgba(0,0,0,.25);}
+            .sidebar.open{transform:translateX(0);}
+            .sidebar .brand{padding:0 20px 2px;font-size:19px;}
+            .sidebar .biz{display:flex;}
+            .nav-item{padding:11px 20px;font-size:14px;border-left:3px solid transparent;border-bottom:none;}
+            .nav-item.active{border-left-color:var(--accent);border-bottom:none;}
+            .logout{margin-top:auto;margin-left:0;padding:14px 20px;}
+            .topbar{padding:12px 16px 12px 62px;}
+            .topbar h1{font-size:16px;}
+            .content{padding:16px 12px 60px;}
+            table{display:block;overflow-x:auto;white-space:nowrap;-webkit-overflow-scrolling:touch;}
+            .register-toolbar{flex-direction:column;align-items:stretch;}
+            .register-toolbar > button, .register-toolbar > .custom-export{width:100%;}
+            .custom-export-panel{flex-direction:column;align-items:stretch;}
+            .custom-export-panel > div{width:100%;}
+            .custom-export-panel input, .custom-export-panel select{width:100%;box-sizing:border-box;}
+            .period-grid{grid-template-columns:1fr;}
+            .launcher-header-row{align-items:stretch;}
+            .launcher-wrap{padding-top:52px;}
           }
           .custom-export{margin-top:10px;}
           .suggest-list{position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--border);border-radius:8px;margin-top:4px;box-shadow:0 8px 20px rgba(10,40,36,.12);z-index:10;max-height:220px;overflow-y:auto;}
@@ -1176,14 +1200,16 @@ export default function App() {
           }
         `}</style>
 
-        <nav className="sidebar">
-          <div className="brand" style={{ cursor: "pointer" }} onClick={() => setView("launcher")} title="Back to app launcher">GANATRA CLINIC</div>
+        <button className="mobile-nav-toggle no-print" onClick={() => setNavOpen((o) => !o)} title="Menu" type="button">☰</button>
+        <div className={"nav-backdrop" + (navOpen ? " open" : "")} onClick={() => setNavOpen(false)} />
+        <nav className={"sidebar" + (navOpen ? " open" : "")}>
+          <div className="brand" style={{ cursor: "pointer" }} onClick={() => goto("launcher")} title="Back to app launcher">GANATRA CLINIC</div>
           <div className="biz" style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <Avatar url={session.avatarUrl} name={session.name} size={38} />
             <span>{settings.proprietor}<br />{session.name} ({session.userId}) · {session.role}<br /><span style={{ opacity: .7 }}>{origin}</span></span>
           </div>
-          <button className={"nav-item" + (view === "launcher" ? " active" : "")} onClick={() => setView("launcher")}><span className="nav-icon-chip" style={{ background: `linear-gradient(135deg, #F4A340, #E85D3D)` }}><span>🔷</span></span>Home</button>
-          {NAV.filter((n) => !n.adminOnly || session.role === "Admin").filter((n) => !n.module || can(n.module, "view")).map((n) => { const g = GROUP_COLORS[n.group]; return (<button key={n.key} className={"nav-item" + (view === n.key ? " active" : "")} onClick={() => setView(n.key)}><span className="nav-icon-chip" style={{ background: `linear-gradient(135deg, ${g[0]}, ${g[1]})` }}><span>{n.icon}</span></span>{n.label}</button>); })}
+          <button className={"nav-item" + (view === "launcher" ? " active" : "")} onClick={() => goto("launcher")}><span className="nav-icon-chip" style={{ background: `linear-gradient(135deg, #F4A340, #E85D3D)` }}><span>🔷</span></span>Home</button>
+          {NAV.filter((n) => !n.adminOnly || session.role === "Admin").filter((n) => !n.module || can(n.module, "view")).map((n) => { const g = GROUP_COLORS[n.group]; return (<button key={n.key} className={"nav-item" + (view === n.key ? " active" : "")} onClick={() => goto(n.key)}><span className="nav-icon-chip" style={{ background: `linear-gradient(135deg, ${g[0]}, ${g[1]})` }}><span>{n.icon}</span></span>{n.label}</button>); })}
           <button className="logout" onClick={() => setSession(null)}>Log out</button>
         </nav>
 
