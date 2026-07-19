@@ -1213,7 +1213,7 @@ export default function App() {
           .custom-export-panel label{display:block;font-size:10px;text-transform:uppercase;color:var(--ink-soft);font-weight:700;margin-bottom:3px;}
           .print-root{display:none;}
           @media print{
-            .sidebar,.topbar .fy-select,.no-print{display:none !important;} .content{padding:0;max-width:100%;} body{background:#fff;} .card{box-shadow:none;border:1px solid #ccc;}
+            .sidebar,.nav-backdrop,.topbar .fy-select,.no-print{display:none !important;} .content{padding:0;max-width:100%;} body{background:#fff;} .card{box-shadow:none;border:1px solid #ccc;}
             body.printing-custom .content > *{display:none !important;}
             body.printing-custom .print-root{display:block !important;}
           }
@@ -1252,7 +1252,7 @@ export default function App() {
                 {view === "dashboard" && <Dashboard settings={settings} collections={collections} referrals={referrals} expenses={expenses} doctorPays={doctorPays} cases={cases} fy={fy} setView={setView} session={session} />}
                 {view === "cases" && can("cases", "view") && <CaseRecords cases={cases} addCase={addCase} updateCase={updateCase} removeCase={removeCase} doctors={doctors} patientsMaster={patientsMaster} pendingSearch={view === "cases" ? pendingSearch : null} clearPendingSearch={clearPendingSearch} can={can} settings={settings} />}
                 {view === "patientMaster" && can("cases", "view") && <PatientMaster can={can} patients={patientsMaster} addPatient={addPatientMaster} updatePatient={updatePatientMaster} removePatient={removePatientMaster} pendingSearch={view === "patientMaster" ? pendingSearch : null} clearPendingSearch={clearPendingSearch} />}
-                {view === "patients" && can("cases", "view") && <PatientHistory can={can} updateCase={updateCase} updateCollection={updateCollection} cases={cases} doctors={doctors} />}
+                {view === "patients" && can("cases", "view") && <PatientHistory can={can} updateCase={updateCase} updateCollection={updateCollection} cases={cases} doctors={doctors} settings={settings} />}
                 {view === "collections" && can("collections", "view") && <Collections collections={collections} addCollection={addCollection} updateCollection={updateCollection} removeCollection={removeCollection} cases={cases} fy={fy} pendingSearch={view === "collections" ? pendingSearch : null} clearPendingSearch={clearPendingSearch} can={can} />}
                 {view === "doctors" && can("doctorPay", "view") && <DoctorShifts doctors={doctors} addDoctor={addDoctor} updateDoctor={updateDoctor} removeDoctor={removeDoctor} doctorPays={doctorPays} addDoctorPay={addDoctorPay} updateDoctorPay={updateDoctorPay} removeDoctorPay={removeDoctorPay} can={can} />}
                 {view === "referrals" && can("referrals", "view") && <Referrals referrals={referrals} addReferral={addReferral} updateReferral={updateReferral} removeReferral={removeReferral} fy={fy} can={can} />}
@@ -1600,7 +1600,7 @@ function LauncherGrid({ settings, session, can, setView, setPendingSearch, cases
     { label: "➕ Add new patient", view: "patientMaster" },
     { label: "💰 Record collection", view: "collections" },
     { label: "🧾 Add expense", view: "expenses" },
-  ].filter((a) => { const nav = NAV.find((n) => n.key === a.view); return !nav.module || can(nav.module, "write"); });
+  ].filter((a) => { const nav = NAV.find((n) => n.key === a.view); return !nav?.module || can(nav.module, "write"); });
 
   const Tile = ({ n }) => {
     return (
@@ -2074,58 +2074,71 @@ function CaseRecords({ cases, addCase, updateCase, removeCase, doctors, patients
   };
   const remove = async (id) => { try { await removeCase(id); if (editingId === id) cancelEdit(); } catch (e) { setErr(e.message); } };
 
-  const printPrescription = () => {
+  const printPrescription = (data) => {
     const win = document.getElementById("print-root");
     if (!win) { window.print(); return; }
-    const doctor = doctors.find((d) => d.id === form.doctorId);
-    const rxRows = rx.filter((r) => r.name.trim());
+    const doctor = doctors.find((d) => d.id === data.doctorId) || (data.doctorName ? { name: data.doctorName } : null);
+    const rxRows = (data.prescriptions || []).filter((r) => r.name && r.name.trim());
+    const dataBmi = data.vitalsWeight && data.vitalsHeight ? (Number(data.vitalsWeight) / ((Number(data.vitalsHeight) / 100) ** 2)).toFixed(1) : "";
     const vitalsBits = [
-      form.vitalsBp && `BP: ${form.vitalsBp}`,
-      form.vitalsPulse && `Pulse: ${form.vitalsPulse} bpm`,
-      form.vitalsTemp && `Temp: ${form.vitalsTemp}°F`,
-      form.vitalsWeight && `Weight: ${form.vitalsWeight} kg`,
-      form.vitalsHeight && `Height: ${form.vitalsHeight} cm`,
-      bmi && `BMI: ${bmi}`,
-    ].filter(Boolean).map(escapeHtml).join(" &nbsp;•&nbsp; ");
+      data.vitalsBp && `BP ${data.vitalsBp}`,
+      data.vitalsPulse && `Pulse ${data.vitalsPulse} bpm`,
+      data.vitalsTemp && `Temp ${data.vitalsTemp}°F`,
+      data.vitalsWeight && `Weight ${data.vitalsWeight} kg`,
+      data.vitalsHeight && `Height ${data.vitalsHeight} cm`,
+      dataBmi && `BMI ${dataBmi}`,
+    ].filter(Boolean).map(escapeHtml).join(" &nbsp;·&nbsp; ");
+    const infoRow = (label, value) => value ? `<div><span style="color:#8A8478;">${escapeHtml(label)}</span> <strong>${escapeHtml(value)}</strong></div>` : "";
+
     win.innerHTML = `
-      <div style="border:1px solid #333;border-radius:4px;padding:14px 16px;margin-bottom:16px;">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;">
-          <h2 style="margin:0;">${escapeHtml(settings?.clinicName || "Your Clinic")}</h2>
-          ${settings?.phone ? `<span style="font-size:12px;">Mob.: ${escapeHtml(settings.phone)}</span>` : ""}
+      <div style="font-family:'Georgia',serif;max-width:720px;margin:0 auto;color:#222;">
+        <div style="border:1.5px solid #333;border-radius:6px;padding:16px 20px;margin-bottom:18px;">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+            <h2 style="margin:0;font-size:22px;letter-spacing:.3px;">${escapeHtml(settings?.clinicName || "Your Clinic")}</h2>
+            ${settings?.phone ? `<span style="font-size:12px;white-space:nowrap;">Mob.: ${escapeHtml(settings.phone)}</span>` : ""}
+          </div>
+          ${doctor ? `<p style="margin:6px 0 0;font-weight:700;font-size:14px;">${escapeHtml(doctor.name)}${doctor.qualifications ? ` &nbsp;<span style="font-weight:400;font-size:12px;">${escapeHtml(doctor.qualifications)}</span>` : ""}</p>` : ""}
+          <div style="display:flex;gap:16px;margin-top:2px;">
+            ${doctor?.registrationNo ? `<span style="font-size:11.5px;color:#333;">Reg. No.: ${escapeHtml(doctor.registrationNo)}</span>` : ""}
+            ${doctor?.specialization ? `<span style="font-size:12px;font-weight:600;">${escapeHtml(doctor.specialization)}</span>` : ""}
+          </div>
+          <p style="margin:6px 0 0;color:#5B6B69;font-size:11px;border-top:1px solid #ddd;padding-top:6px;">${[settings?.address, settings?.email, settings?.timings].filter(Boolean).map(escapeHtml).join(" &nbsp;·&nbsp; ")}</p>
         </div>
-        ${doctor ? `<p style="margin:4px 0 0;font-weight:700;font-size:13.5px;">${escapeHtml(doctor.name)}${doctor.qualifications ? ` &nbsp;<span style="font-weight:400;font-size:12px;">${escapeHtml(doctor.qualifications)}</span>` : ""}</p>` : ""}
-        ${doctor?.registrationNo ? `<p style="margin:1px 0 0;font-size:11.5px;color:#333;">Reg. No.: ${escapeHtml(doctor.registrationNo)}</p>` : ""}
-        ${doctor?.specialization ? `<p style="margin:3px 0 0;font-size:12px;font-weight:600;">${escapeHtml(doctor.specialization)}</p>` : ""}
-        <p style="margin:4px 0 0;color:#5B6B69;font-size:11.5px;">${[settings?.address, settings?.email, settings?.timings].filter(Boolean).map(escapeHtml).join(" &nbsp;•&nbsp; ")}</p>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 24px;background:#FAF8F3;border:1px solid #E5DFC8;border-radius:6px;padding:12px 16px;margin-bottom:16px;font-size:13px;">
+          ${infoRow("Case No.", data.caseNo)}
+          ${infoRow("Date", data.date)}
+          ${infoRow("Patient", data.patientName)}
+          ${infoRow("Phone", data.phone)}
+          ${doctor ? infoRow("Doctor", doctor.name) : ""}
+          ${infoRow("Shift", data.shift)}
+        </div>
+
+        ${vitalsBits ? `<p style="font-size:12.5px;color:#333;margin:0 0 8px;"><strong>Vitals:</strong> ${vitalsBits}</p>` : ""}
+        ${data.diagnosis ? `<p style="font-size:13.5px;margin:0 0 6px;"><strong>Diagnosis:</strong> ${escapeHtml(data.diagnosis)}</p>` : ""}
+        ${data.clinicalNotes ? `<p style="font-size:13px;margin:0 0 6px;color:#333;"><strong>Notes:</strong> ${escapeHtml(data.clinicalNotes)}</p>` : ""}
+
+        ${rxRows.length > 0 ? `
+          <h3 style="margin:20px 0 8px;font-size:17px;border-bottom:2px solid #C9A227;padding-bottom:6px;">℞ Prescription</h3>
+          <table style="width:100%;border-collapse:collapse;font-size:13px;">
+            <thead><tr>
+              <th style="text-align:left;border-bottom:2px solid #333;padding:6px 8px;">Medicine</th>
+              <th style="text-align:left;border-bottom:2px solid #333;padding:6px 8px;">Dosage</th>
+              <th style="text-align:left;border-bottom:2px solid #333;padding:6px 8px;">Frequency</th>
+              <th style="text-align:left;border-bottom:2px solid #333;padding:6px 8px;">Duration</th>
+              <th style="text-align:left;border-bottom:2px solid #333;padding:6px 8px;">Instructions</th>
+            </tr></thead>
+            <tbody>${rxRows.map((r) => `<tr>
+              <td style="padding:6px 8px;border-bottom:1px solid #eee;">${escapeHtml(r.name)}</td>
+              <td style="padding:6px 8px;border-bottom:1px solid #eee;">${escapeHtml(r.dosage)}</td>
+              <td style="padding:6px 8px;border-bottom:1px solid #eee;">${escapeHtml(r.frequency)}</td>
+              <td style="padding:6px 8px;border-bottom:1px solid #eee;">${escapeHtml(r.duration)}</td>
+              <td style="padding:6px 8px;border-bottom:1px solid #eee;">${escapeHtml(r.instructions)}</td>
+            </tr>`).join("")}</tbody>
+          </table>` : ""}
+        ${data.externalPrescription ? `<p style="font-size:12.5px;margin-top:14px;"><strong>Also buy from medical store:</strong> ${escapeHtml(data.externalPrescription)}</p>` : ""}
+        <p style="margin-top:70px;font-size:12.5px;text-align:right;">Signature: ______________________</p>
       </div>
-      <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:14px;">
-        <div><strong>Patient:</strong> ${escapeHtml(form.patientName)}${form.phone ? ` &nbsp;(${escapeHtml(form.phone)})` : ""}</div>
-        <div><strong>Date:</strong> ${escapeHtml(form.date)}</div>
-      </div>
-      ${doctor ? `<p style="font-size:13px;"><strong>Shift:</strong> ${escapeHtml(form.shift)}</p>` : ""}
-      ${vitalsBits ? `<p style="font-size:12.5px;color:#333;"><strong>Vitals:</strong> ${vitalsBits}</p>` : ""}
-      ${form.diagnosis ? `<p style="font-size:13px;"><strong>Diagnosis:</strong> ${escapeHtml(form.diagnosis)}</p>` : ""}
-      ${form.clinicalNotes ? `<p style="font-size:13px;"><strong>Notes:</strong> ${escapeHtml(form.clinicalNotes)}</p>` : ""}
-      ${rxRows.length > 0 ? `
-        <h3 style="margin:18px 0 8px;border-bottom:1px solid #ccc;padding-bottom:4px;">℞ Prescription</h3>
-        <table style="width:100%;border-collapse:collapse;font-size:13px;">
-          <thead><tr>
-            <th style="text-align:left;border-bottom:2px solid #C9A227;padding:5px 6px;">Medicine</th>
-            <th style="text-align:left;border-bottom:2px solid #C9A227;padding:5px 6px;">Dosage</th>
-            <th style="text-align:left;border-bottom:2px solid #C9A227;padding:5px 6px;">Frequency</th>
-            <th style="text-align:left;border-bottom:2px solid #C9A227;padding:5px 6px;">Duration</th>
-            <th style="text-align:left;border-bottom:2px solid #C9A227;padding:5px 6px;">Instructions</th>
-          </tr></thead>
-          <tbody>${rxRows.map((r) => `<tr>
-            <td style="padding:5px 6px;border-bottom:1px solid #eee;">${escapeHtml(r.name)}</td>
-            <td style="padding:5px 6px;border-bottom:1px solid #eee;">${escapeHtml(r.dosage)}</td>
-            <td style="padding:5px 6px;border-bottom:1px solid #eee;">${escapeHtml(r.frequency)}</td>
-            <td style="padding:5px 6px;border-bottom:1px solid #eee;">${escapeHtml(r.duration)}</td>
-            <td style="padding:5px 6px;border-bottom:1px solid #eee;">${escapeHtml(r.instructions)}</td>
-          </tr>`).join("")}</tbody>
-        </table>` : ""}
-      ${form.externalPrescription ? `<p style="font-size:12.5px;margin-top:14px;"><strong>Also buy from medical store:</strong> ${escapeHtml(form.externalPrescription)}</p>` : ""}
-      <p style="margin-top:60px;font-size:12.5px;text-align:right;">Signature: ______________________</p>
     `;
     document.body.classList.add("printing-custom");
     window.print();
@@ -2342,7 +2355,7 @@ function CaseRecords({ cases, addCase, updateCase, removeCase, doctors, patients
         </div>
         <div style={{ marginTop: 16, display: "flex", gap: 8 }}>
           {(editingId ? can("cases", "edit") : can("cases", "write")) && <button className="btn" type="button" disabled={busy} onClick={save}>{busy ? "Saving…" : editingId ? "Update case record" : "Save case record"}</button>}
-          <button className="btn secondary" type="button" onClick={printPrescription} disabled={!form.patientName.trim()}>🖨 Print prescription</button>
+          <button className="btn secondary" type="button" onClick={() => printPrescription({ ...form, caseNo: editingId ? cases.find((c) => c.id === editingId)?.caseNo : null, prescriptions: rx })} disabled={!form.patientName.trim()}>🖨 Print prescription</button>
           {editingId && <button className="btn secondary" type="button" onClick={cancelEdit}>Cancel edit</button>}
         </div>
         <ErrorNote msg={err} />
@@ -2362,7 +2375,7 @@ function CaseRecords({ cases, addCase, updateCase, removeCase, doctors, patients
               <tr key={c.id} data-row-id={c.id} className={highlightId === c.id ? "row-highlight" : undefined}><td>{c.caseNo}</td><td>{c.date}</td><td>{c.patientName}</td><td>{c.doctorName || "—"}</td>
                 <td><span className={"pill " + (c.shift || "").toLowerCase()}>{c.shift}</span></td>
                 <td style={{ maxWidth: 180 }}>{c.briefHistory}</td><td style={{ maxWidth: 160 }}>{c.diagnosis || "—"}</td><td className="num">{inr(medValue(c))}</td>
-                <td>{c.image ? "📎" : "—"}</td><td style={{ display: "flex", gap: 6 }}>{can("cases", "edit") && <button className="btn secondary small" type="button" onClick={() => startEdit(c)}>Edit</button>}{can("cases", "delete") && <button className="btn danger small" type="button" onClick={() => remove(c.id)}>Delete</button>}</td></tr>
+                <td>{c.image ? "📎" : "—"}</td><td style={{ display: "flex", gap: 6 }}><button className="btn secondary small" type="button" onClick={() => printPrescription(c)}>🖨 Print</button>{can("cases", "edit") && <button className="btn secondary small" type="button" onClick={() => startEdit(c)}>Edit</button>}{can("cases", "delete") && <button className="btn danger small" type="button" onClick={() => remove(c.id)}>Delete</button>}</td></tr>
             ))}</tbody>
           </table>
         )}
@@ -2488,7 +2501,7 @@ function PatientMaster({ can, patients, addPatient, updatePatient, removePatient
 }
 
 /* ============================== PATIENT HISTORY ============================== */
-function PatientHistory({ can, updateCase, updateCollection, cases, doctors }) {
+function PatientHistory({ can, updateCase, updateCollection, cases, doctors, settings }) {
   const { call } = useApi();
   const [editCase, setEditCase] = useState(null);
   const [editColl, setEditColl] = useState(null);
@@ -2548,6 +2561,80 @@ function PatientHistory({ can, updateCase, updateCollection, cases, doctors }) {
   };
 
   const medValue = (c) => (c.medicines || []).reduce((s, m) => s + Number(m.qty) * Number(m.unit_price), 0);
+
+  // Same letterhead design as Case Records' printPrescription, adapted to
+  // this component's raw (snake_case, unmapped) data shape — this endpoint
+  // returns rows straight from the database rather than through mapCase.
+  const printVisit = (c) => {
+    const win = document.getElementById("print-root");
+    if (!win) { window.print(); return; }
+    const doctor = doctors.find((d) => d.id === c.doctor_id) || (c.doctor_name ? { name: c.doctor_name } : null);
+    const rxRows = (c.prescriptions || []).filter((r) => r.medicine_name && r.medicine_name.trim());
+    const dataBmi = c.vitals_weight && c.vitals_height ? (Number(c.vitals_weight) / ((Number(c.vitals_height) / 100) ** 2)).toFixed(1) : "";
+    const vitalsBits = [
+      c.vitals_bp && `BP ${c.vitals_bp}`,
+      c.vitals_pulse && `Pulse ${c.vitals_pulse} bpm`,
+      c.vitals_temp && `Temp ${c.vitals_temp}°F`,
+      c.vitals_weight && `Weight ${c.vitals_weight} kg`,
+      c.vitals_height && `Height ${c.vitals_height} cm`,
+      dataBmi && `BMI ${dataBmi}`,
+    ].filter(Boolean).map(escapeHtml).join(" &nbsp;·&nbsp; ");
+    const infoRow = (label, value) => value ? `<div><span style="color:#8A8478;">${escapeHtml(label)}</span> <strong>${escapeHtml(value)}</strong></div>` : "";
+
+    win.innerHTML = `
+      <div style="font-family:'Georgia',serif;max-width:720px;margin:0 auto;color:#222;">
+        <div style="border:1.5px solid #333;border-radius:6px;padding:16px 20px;margin-bottom:18px;">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+            <h2 style="margin:0;font-size:22px;letter-spacing:.3px;">${escapeHtml(settings?.clinicName || "Your Clinic")}</h2>
+            ${settings?.phone ? `<span style="font-size:12px;white-space:nowrap;">Mob.: ${escapeHtml(settings.phone)}</span>` : ""}
+          </div>
+          ${doctor ? `<p style="margin:6px 0 0;font-weight:700;font-size:14px;">${escapeHtml(doctor.name)}${doctor.qualifications ? ` &nbsp;<span style="font-weight:400;font-size:12px;">${escapeHtml(doctor.qualifications)}</span>` : ""}</p>` : ""}
+          <div style="display:flex;gap:16px;margin-top:2px;">
+            ${doctor?.registrationNo ? `<span style="font-size:11.5px;color:#333;">Reg. No.: ${escapeHtml(doctor.registrationNo)}</span>` : ""}
+            ${doctor?.specialization ? `<span style="font-size:12px;font-weight:600;">${escapeHtml(doctor.specialization)}</span>` : ""}
+          </div>
+          <p style="margin:6px 0 0;color:#5B6B69;font-size:11px;border-top:1px solid #ddd;padding-top:6px;">${[settings?.address, settings?.email, settings?.timings].filter(Boolean).map(escapeHtml).join(" &nbsp;·&nbsp; ")}</p>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 24px;background:#FAF8F3;border:1px solid #E5DFC8;border-radius:6px;padding:12px 16px;margin-bottom:16px;font-size:13px;">
+          ${infoRow("Case No.", c.case_no)}
+          ${infoRow("Date", d10(c.case_date))}
+          ${infoRow("Patient", c.patient_name)}
+          ${infoRow("Phone", c.phone)}
+          ${doctor ? infoRow("Doctor", doctor.name) : ""}
+          ${infoRow("Shift", c.shift)}
+        </div>
+
+        ${vitalsBits ? `<p style="font-size:12.5px;color:#333;margin:0 0 8px;"><strong>Vitals:</strong> ${vitalsBits}</p>` : ""}
+        ${c.diagnosis ? `<p style="font-size:13.5px;margin:0 0 6px;"><strong>Diagnosis:</strong> ${escapeHtml(c.diagnosis)}</p>` : ""}
+        ${c.clinical_notes ? `<p style="font-size:13px;margin:0 0 6px;color:#333;"><strong>Notes:</strong> ${escapeHtml(c.clinical_notes)}</p>` : ""}
+
+        ${rxRows.length > 0 ? `
+          <h3 style="margin:20px 0 8px;font-size:17px;border-bottom:2px solid #C9A227;padding-bottom:6px;">℞ Prescription</h3>
+          <table style="width:100%;border-collapse:collapse;font-size:13px;">
+            <thead><tr>
+              <th style="text-align:left;border-bottom:2px solid #333;padding:6px 8px;">Medicine</th>
+              <th style="text-align:left;border-bottom:2px solid #333;padding:6px 8px;">Dosage</th>
+              <th style="text-align:left;border-bottom:2px solid #333;padding:6px 8px;">Frequency</th>
+              <th style="text-align:left;border-bottom:2px solid #333;padding:6px 8px;">Duration</th>
+              <th style="text-align:left;border-bottom:2px solid #333;padding:6px 8px;">Instructions</th>
+            </tr></thead>
+            <tbody>${rxRows.map((r) => `<tr>
+              <td style="padding:6px 8px;border-bottom:1px solid #eee;">${escapeHtml(r.medicine_name)}</td>
+              <td style="padding:6px 8px;border-bottom:1px solid #eee;">${escapeHtml(r.dosage)}</td>
+              <td style="padding:6px 8px;border-bottom:1px solid #eee;">${escapeHtml(r.frequency)}</td>
+              <td style="padding:6px 8px;border-bottom:1px solid #eee;">${escapeHtml(r.duration)}</td>
+              <td style="padding:6px 8px;border-bottom:1px solid #eee;">${escapeHtml(r.instructions)}</td>
+            </tr>`).join("")}</tbody>
+          </table>` : ""}
+        ${c.external_prescription ? `<p style="font-size:12.5px;margin-top:14px;"><strong>Also buy from medical store:</strong> ${escapeHtml(c.external_prescription)}</p>` : ""}
+        <p style="margin-top:70px;font-size:12.5px;text-align:right;">Signature: ______________________</p>
+      </div>
+    `;
+    document.body.classList.add("printing-custom");
+    window.print();
+    setTimeout(() => { document.body.classList.remove("printing-custom"); win.innerHTML = ""; }, 300);
+  };
 
   const doExcel = () => {
     if (!data) return;
@@ -2678,7 +2765,7 @@ function PatientHistory({ can, updateCase, updateCollection, cases, doctors }) {
                     <tbody>{data.cases.map((c) => (
                       <tr key={c.id}><td>{c.case_no}</td><td>{d10(c.case_date)}</td><td>{c.doctor_name || "—"}</td>
                         <td><span className={"pill " + (c.shift || "").toLowerCase()}>{c.shift}</span></td>
-                        <td style={{ maxWidth: 200 }}>{c.brief_history}</td><td style={{ maxWidth: 160 }}>{c.diagnosis || "—"}</td><td className="num">{inr(medValue(c))}</td><td>{can("cases", "edit") && <button className="btn secondary small" type="button" onClick={() => startEditCase(c)}>Edit</button>}</td></tr>
+                        <td style={{ maxWidth: 200 }}>{c.brief_history}</td><td style={{ maxWidth: 160 }}>{c.diagnosis || "—"}</td><td className="num">{inr(medValue(c))}</td><td style={{ display: "flex", gap: 6 }}><button className="btn secondary small" type="button" onClick={() => printVisit(c)}>🖨 Print</button>{can("cases", "edit") && <button className="btn secondary small" type="button" onClick={() => startEditCase(c)}>Edit</button>}</td></tr>
                     ))}</tbody>
                   </table>
                 )}
