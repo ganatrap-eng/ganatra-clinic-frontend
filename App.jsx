@@ -29,6 +29,18 @@ const EXPENSE_CATEGORIES = [
 ];
 const SHIFTS = ["Morning", "Evening"];
 const PAY_TYPES = ["Daily", "Monthly"];
+// Quick-select chips for "Brief medical history" — the same shortlist
+// already printed on the clinic's paper prescription pad, so staff can tap
+// instead of retyping the same handful of common complaints every time.
+const COMMON_COMPLAINTS = ["Fever", "Cold", "Loose Motion", "Weakness", "Dizziness", "Abdominal Pain", "Fungal Infection"];
+/** Toggles a complaint term in/out of a comma-separated history string
+ *  without disturbing anything else the person typed. */
+function toggleComplaint(current, term) {
+  const parts = current.split(",").map((s) => s.trim()).filter(Boolean);
+  const has = parts.some((p) => p.toLowerCase() === term.toLowerCase());
+  const next = has ? parts.filter((p) => p.toLowerCase() !== term.toLowerCase()) : [...parts, term];
+  return next.join(", ");
+}
 const COLLECTION_MODES = ["Cash", "UPI", "Card", "Other"];
 const REFERRAL_TYPES = ["Lab Test", "Hospital"];
 const COLORS = ["#714B67", "#C9A227", "#1F8A5F", "#B3423A", "#5B6B69", "#7FB3AB", "#E8C468"];
@@ -374,12 +386,15 @@ function CustomExport({ rows, allRows, filters, dateField, buildSheets, filename
 function PrintRoot() { return <div id="print-root" className="print-root"></div>; }
 
 /* -------- row → app-shape mappers (backend is snake_case) -------- */
-const mapDoctor = (r) => ({ id: r.id, name: r.name, shift: r.shift, payType: r.pay_type, rate: Number(r.rate) });
+const mapDoctor = (r) => ({ id: r.id, name: r.name, shift: r.shift, payType: r.pay_type, rate: Number(r.rate), registrationNo: r.registration_no || "", qualifications: r.qualifications || "", specialization: r.specialization || "" });
 const mapCase = (r) => ({
   id: r.id, caseNo: r.case_no, date: d10(r.case_date), patientName: r.patient_name, phone: r.phone,
   briefHistory: r.brief_history, doctorId: r.doctor_id, doctorName: r.doctor_name, shift: r.shift,
   externalPrescription: r.external_prescription, image: r.image_url, createdAt: r.created_at,
   medicines: (r.medicines || []).map((m) => ({ name: m.medicine_name, qty: Number(m.qty), price: Number(m.unit_price) })),
+  vitalsBp: r.vitals_bp || "", vitalsPulse: r.vitals_pulse ?? "", vitalsTemp: r.vitals_temp ?? "", vitalsWeight: r.vitals_weight ?? "", vitalsHeight: r.vitals_height ?? "",
+  diagnosis: r.diagnosis || "", clinicalNotes: r.clinical_notes || "",
+  prescriptions: (r.prescriptions || []).map((p) => ({ name: p.medicine_name, dosage: p.dosage || "", frequency: p.frequency || "", duration: p.duration || "", instructions: p.instructions || "" })),
 });
 const mapCollection = (r) => ({
   id: r.id, caseId: r.case_id, caseNo: r.case_no, patientName: r.patient_name, phone: r.phone,
@@ -392,7 +407,7 @@ const mapGift = (r) => ({ id: r.id, date: d10(r.gift_date), repName: r.rep_name,
 const mapExpense = (r) => ({ id: r.id, date: d10(r.expense_date), category: r.category, amount: Number(r.amount), narration: r.narration, image: r.image_url, createdAt: r.created_at });
 const mapAsset = (r) => ({ id: r.id, name: r.name, block: r.block, rate: Number(r.rate), purchaseDate: d10(r.purchase_date), cost: Number(r.cost) });
 const mapCapital = (r) => ({ id: r.id, date: d10(r.txn_date), type: r.txn_type, amount: Number(r.amount), note: r.note });
-const mapSettings = (r) => ({ clinicName: r.clinic_name || "Your Clinic", proprietor: r.proprietor || "", address: r.address || "", phone: r.phone || "" });
+const mapSettings = (r) => ({ clinicName: r.clinic_name || "Your Clinic", proprietor: r.proprietor || "", address: r.address || "", phone: r.phone || "", email: r.email || "", timings: r.timings || "" });
 
 /* -------- Image capture: upload, rotate to align, attach via API -------- */
 /** Displays a user's avatar — fetched the same authenticated way as every
@@ -832,11 +847,11 @@ function AuthScreen({ onLogin, origin, setOrigin }) {
 
 /* ============================== NAV / SHELL ============================== */
 const GROUP_COLORS = {
-  clinical: ["#2FADA0", "#0F6B60"], // teal
-  finance: ["#3FB86E", "#1F8A5F"], // green
-  operations: ["#E8A23D", "#B3781F"], // amber
-  admin: ["#8A97A8", "#5B6B78"], // grey
-  overview: ["#F4A340", "#E85D3D"], // orange — Dashboard sits outside the four groups
+  clinical: ["#1FC8C0", "#0A7B82"], // vibrant teal/sapphire
+  finance: ["#2ECC71", "#0E8C5A"], // rich emerald
+  operations: ["#FFC145", "#E8901A"], // warm gold/amber
+  admin: ["#A379E8", "#6C4BC7"], // amethyst — replaces the flat grey
+  overview: ["#FF8A5B", "#E8482A"], // coral-orange — Dashboard sits outside the four groups
 };
 
 const NAV = [
@@ -868,7 +883,7 @@ export default function App() {
   const clearPendingSearch = useCallback(() => setPendingSearch(null), []);
   const [fy, setFy] = useState(fyOf(todayISO()));
 
-  const [settings, setSettings] = useState({ clinicName: "Your Clinic", proprietor: "", address: "", phone: "" });
+  const [settings, setSettings] = useState({ clinicName: "Your Clinic", proprietor: "", address: "", phone: "", email: "", timings: "" });
   const [doctors, setDoctors] = useState([]);
   const [cases, setCases] = useState([]);
   const [collections, setCollections] = useState([]);
@@ -1198,7 +1213,7 @@ export default function App() {
           .custom-export-panel label{display:block;font-size:10px;text-transform:uppercase;color:var(--ink-soft);font-weight:700;margin-bottom:3px;}
           .print-root{display:none;}
           @media print{
-            .sidebar,.topbar .fy-select,.no-print{display:none !important;} .content{padding:0;max-width:100%;} body{background:#fff;} .card{box-shadow:none;border:1px solid #ccc;}
+            .sidebar,.nav-backdrop,.topbar .fy-select,.no-print{display:none !important;} .content{padding:0;max-width:100%;} body{background:#fff;} .card{box-shadow:none;border:1px solid #ccc;}
             body.printing-custom .content > *{display:none !important;}
             body.printing-custom .print-root{display:block !important;}
           }
@@ -1235,9 +1250,9 @@ export default function App() {
               <>
                 {view === "launcher" && <LauncherGrid settings={settings} session={session} can={can} setView={setView} setPendingSearch={setPendingSearch} cases={cases} collections={collections} expenses={expenses} doctorPays={doctorPays} referrals={referrals} gifts={gifts} doctors={doctors} patientsMaster={patientsMaster} />}
                 {view === "dashboard" && <Dashboard settings={settings} collections={collections} referrals={referrals} expenses={expenses} doctorPays={doctorPays} cases={cases} fy={fy} setView={setView} session={session} />}
-                {view === "cases" && can("cases", "view") && <CaseRecords cases={cases} addCase={addCase} updateCase={updateCase} removeCase={removeCase} doctors={doctors} patientsMaster={patientsMaster} pendingSearch={view === "cases" ? pendingSearch : null} clearPendingSearch={clearPendingSearch} can={can} />}
+                {view === "cases" && can("cases", "view") && <CaseRecords cases={cases} addCase={addCase} updateCase={updateCase} removeCase={removeCase} doctors={doctors} patientsMaster={patientsMaster} pendingSearch={view === "cases" ? pendingSearch : null} clearPendingSearch={clearPendingSearch} can={can} settings={settings} />}
                 {view === "patientMaster" && can("cases", "view") && <PatientMaster can={can} patients={patientsMaster} addPatient={addPatientMaster} updatePatient={updatePatientMaster} removePatient={removePatientMaster} pendingSearch={view === "patientMaster" ? pendingSearch : null} clearPendingSearch={clearPendingSearch} />}
-                {view === "patients" && can("cases", "view") && <PatientHistory can={can} updateCase={updateCase} updateCollection={updateCollection} cases={cases} doctors={doctors} />}
+                {view === "patients" && can("cases", "view") && <PatientHistory can={can} updateCase={updateCase} updateCollection={updateCollection} cases={cases} doctors={doctors} settings={settings} />}
                 {view === "collections" && can("collections", "view") && <Collections collections={collections} addCollection={addCollection} updateCollection={updateCollection} removeCollection={removeCollection} cases={cases} fy={fy} pendingSearch={view === "collections" ? pendingSearch : null} clearPendingSearch={clearPendingSearch} can={can} />}
                 {view === "doctors" && can("doctorPay", "view") && <DoctorShifts doctors={doctors} addDoctor={addDoctor} updateDoctor={updateDoctor} removeDoctor={removeDoctor} doctorPays={doctorPays} addDoctorPay={addDoctorPay} updateDoctorPay={updateDoctorPay} removeDoctorPay={removeDoctorPay} can={can} />}
                 {view === "referrals" && can("referrals", "view") && <Referrals referrals={referrals} addReferral={addReferral} updateReferral={updateReferral} removeReferral={removeReferral} fy={fy} can={can} />}
@@ -1585,7 +1600,7 @@ function LauncherGrid({ settings, session, can, setView, setPendingSearch, cases
     { label: "➕ Add new patient", view: "patientMaster" },
     { label: "💰 Record collection", view: "collections" },
     { label: "🧾 Add expense", view: "expenses" },
-  ].filter((a) => { const nav = NAV.find((n) => n.key === a.view); return !nav.module || can(nav.module, "write"); });
+  ].filter((a) => { const nav = NAV.find((n) => n.key === a.view); return !nav?.module || can(nav.module, "write"); });
 
   const Tile = ({ n }) => {
     return (
@@ -2000,10 +2015,13 @@ function Dashboard({ settings, collections, referrals, expenses, doctorPays, cas
 }
 
 /* ============================== CASE RECORDS ============================== */
-function CaseRecords({ cases, addCase, updateCase, removeCase, doctors, patientsMaster, pendingSearch, clearPendingSearch, can }) {
-  const blank = { date: todayISO(), patientName: "", phone: "", briefHistory: "", doctorId: doctors[0]?.id || "", shift: "Morning", externalPrescription: "", image: null };
+function CaseRecords({ cases, addCase, updateCase, removeCase, doctors, patientsMaster, pendingSearch, clearPendingSearch, can, settings }) {
+  const blank = { date: todayISO(), patientName: "", phone: "", briefHistory: "", doctorId: doctors[0]?.id || "", shift: "Morning", externalPrescription: "", image: null,
+    vitalsBp: "", vitalsPulse: "", vitalsTemp: "", vitalsWeight: "", vitalsHeight: "", diagnosis: "", clinicalNotes: "" };
   const [form, setForm] = useState(blank);
   const [meds, setMeds] = useState([{ name: "", qty: "", price: "" }]);
+  const blankRx = { name: "", dosage: "", frequency: "", duration: "", instructions: "" };
+  const [rx, setRx] = useState([{ ...blankRx }]);
   const [err, setErr] = useState(""); const [busy, setBusy] = useState(false);
   const [nameSuggestOpen, setNameSuggestOpen] = useState(false);
   const [phoneSuggestOpen, setPhoneSuggestOpen] = useState(false);
@@ -2017,31 +2035,115 @@ function CaseRecords({ cases, addCase, updateCase, removeCase, doctors, patients
   const updMed = (i, f, v) => { const n = [...meds]; n[i] = { ...n[i], [f]: v }; setMeds(n); };
   const rmMed = (i) => setMeds(meds.filter((_, idx) => idx !== i));
 
+  const addRxRow = () => setRx([...rx, { ...blankRx }]);
+  const updRx = (i, f, v) => { const n = [...rx]; n[i] = { ...n[i], [f]: v }; setRx(n); };
+  const rmRx = (i) => setRx(rx.filter((_, idx) => idx !== i));
+  const bmi = form.vitalsWeight && form.vitalsHeight ? (Number(form.vitalsWeight) / ((Number(form.vitalsHeight) / 100) ** 2)).toFixed(1) : "";
+
   const [editingId, setEditingId] = useState(null);
   const [panelOpen, setPanelOpen] = useState(false);
-  const openAdd = () => { setEditingId(null); setForm(blank); setMeds([{ name: "", qty: "", price: "" }]); setErr(""); setPanelOpen(true); };
+  const openAdd = () => { setEditingId(null); setForm(blank); setMeds([{ name: "", qty: "", price: "" }]); setRx([{ ...blankRx }]); setErr(""); setPanelOpen(true); };
   const startEdit = (c) => {
     setEditingId(c.id);
-    setForm({ date: c.date, patientName: c.patientName, phone: c.phone || "", briefHistory: c.briefHistory || "", doctorId: c.doctorId || "", shift: c.shift || "Morning", externalPrescription: c.externalPrescription || "", image: c.image || null });
+    setForm({
+      date: c.date, patientName: c.patientName, phone: c.phone || "", briefHistory: c.briefHistory || "", doctorId: c.doctorId || "", shift: c.shift || "Morning", externalPrescription: c.externalPrescription || "", image: c.image || null,
+      vitalsBp: c.vitalsBp || "", vitalsPulse: c.vitalsPulse ?? "", vitalsTemp: c.vitalsTemp ?? "", vitalsWeight: c.vitalsWeight ?? "", vitalsHeight: c.vitalsHeight ?? "", diagnosis: c.diagnosis || "", clinicalNotes: c.clinicalNotes || "",
+    });
     setMeds(c.medicines && c.medicines.length ? c.medicines.map((m) => ({ name: m.name, qty: String(m.qty), price: String(m.price) })) : [{ name: "", qty: "", price: "" }]);
+    setRx(c.prescriptions && c.prescriptions.length ? c.prescriptions.map((r) => ({ ...r })) : [{ ...blankRx }]);
     setErr("");
     setPanelOpen(true);
   };
-  const cancelEdit = () => { setEditingId(null); setForm(blank); setMeds([{ name: "", qty: "", price: "" }]); setErr(""); setPanelOpen(false); };
+  const cancelEdit = () => { setEditingId(null); setForm(blank); setMeds([{ name: "", qty: "", price: "" }]); setRx([{ ...blankRx }]); setErr(""); setPanelOpen(false); };
   const save = async () => {
     setErr("");
     if (!form.patientName.trim()) { setErr("Enter the patient's name."); return; }
     const medicines = meds.filter((m) => m.name.trim()).map((m) => ({ name: m.name, qty: Number(m.qty) || 0, price: Number(m.price) || 0 }));
+    const prescriptions = rx.filter((r) => r.name.trim()).map((r) => ({ name: r.name, dosage: r.dosage, frequency: r.frequency, duration: r.duration, instructions: r.instructions }));
     setBusy(true);
-    const payload = { date: form.date, patientName: form.patientName, phone: form.phone, briefHistory: form.briefHistory, doctorId: form.doctorId || null, shift: form.shift, externalPrescription: form.externalPrescription, imageUrl: form.image, medicines };
+    const payload = {
+      date: form.date, patientName: form.patientName, phone: form.phone, briefHistory: form.briefHistory, doctorId: form.doctorId || null, shift: form.shift, externalPrescription: form.externalPrescription, imageUrl: form.image, medicines,
+      vitalsBp: form.vitalsBp, vitalsPulse: form.vitalsPulse, vitalsTemp: form.vitalsTemp, vitalsWeight: form.vitalsWeight, vitalsHeight: form.vitalsHeight, diagnosis: form.diagnosis, clinicalNotes: form.clinicalNotes, prescriptions,
+    };
     try {
       if (editingId) { await updateCase(editingId, payload); setEditingId(null); }
       else { await addCase(payload); }
-      setForm(blank); setMeds([{ name: "", qty: "", price: "" }]); setPanelOpen(false);
+      setForm(blank); setMeds([{ name: "", qty: "", price: "" }]); setRx([{ ...blankRx }]); setPanelOpen(false);
     } catch (e) { setErr(e.message); }
     setBusy(false);
   };
   const remove = async (id) => { try { await removeCase(id); if (editingId === id) cancelEdit(); } catch (e) { setErr(e.message); } };
+
+  const printPrescription = (data) => {
+    const win = document.getElementById("print-root");
+    if (!win) { window.print(); return; }
+    const doctor = doctors.find((d) => d.id === data.doctorId) || (data.doctorName ? { name: data.doctorName } : null);
+    const rxRows = (data.prescriptions || []).filter((r) => r.name && r.name.trim());
+    const dataBmi = data.vitalsWeight && data.vitalsHeight ? (Number(data.vitalsWeight) / ((Number(data.vitalsHeight) / 100) ** 2)).toFixed(1) : "";
+    const vitalsBits = [
+      data.vitalsBp && `BP ${data.vitalsBp}`,
+      data.vitalsPulse && `Pulse ${data.vitalsPulse} bpm`,
+      data.vitalsTemp && `Temp ${data.vitalsTemp}°F`,
+      data.vitalsWeight && `Weight ${data.vitalsWeight} kg`,
+      data.vitalsHeight && `Height ${data.vitalsHeight} cm`,
+      dataBmi && `BMI ${dataBmi}`,
+    ].filter(Boolean).map(escapeHtml).join(" &nbsp;·&nbsp; ");
+    const infoRow = (label, value) => value ? `<div><span style="color:#8A8478;">${escapeHtml(label)}</span> <strong>${escapeHtml(value)}</strong></div>` : "";
+
+    win.innerHTML = `
+      <div style="font-family:'Georgia',serif;max-width:720px;margin:0 auto;color:#222;">
+        <div style="border:1.5px solid #333;border-radius:6px;padding:16px 20px;margin-bottom:18px;">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+            <h2 style="margin:0;font-size:22px;letter-spacing:.3px;">${escapeHtml(settings?.clinicName || "Your Clinic")}</h2>
+            ${settings?.phone ? `<span style="font-size:12px;white-space:nowrap;">Mob.: ${escapeHtml(settings.phone)}</span>` : ""}
+          </div>
+          ${doctor ? `<p style="margin:6px 0 0;font-weight:700;font-size:14px;">${escapeHtml(doctor.name)}${doctor.qualifications ? ` &nbsp;<span style="font-weight:400;font-size:12px;">${escapeHtml(doctor.qualifications)}</span>` : ""}</p>` : ""}
+          <div style="display:flex;gap:16px;margin-top:2px;">
+            ${doctor?.registrationNo ? `<span style="font-size:11.5px;color:#333;">Reg. No.: ${escapeHtml(doctor.registrationNo)}</span>` : ""}
+            ${doctor?.specialization ? `<span style="font-size:12px;font-weight:600;">${escapeHtml(doctor.specialization)}</span>` : ""}
+          </div>
+          <p style="margin:6px 0 0;color:#5B6B69;font-size:11px;border-top:1px solid #ddd;padding-top:6px;">${[settings?.address, settings?.email, settings?.timings].filter(Boolean).map(escapeHtml).join(" &nbsp;·&nbsp; ")}</p>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 24px;background:#FAF8F3;border:1px solid #E5DFC8;border-radius:6px;padding:12px 16px;margin-bottom:16px;font-size:13px;">
+          ${infoRow("Case No.", data.caseNo)}
+          ${infoRow("Date", data.date)}
+          ${infoRow("Patient", data.patientName)}
+          ${infoRow("Phone", data.phone)}
+          ${doctor ? infoRow("Doctor", doctor.name) : ""}
+          ${infoRow("Shift", data.shift)}
+        </div>
+
+        ${vitalsBits ? `<p style="font-size:12.5px;color:#333;margin:0 0 8px;"><strong>Vitals:</strong> ${vitalsBits}</p>` : ""}
+        ${data.diagnosis ? `<p style="font-size:13.5px;margin:0 0 6px;"><strong>Diagnosis:</strong> ${escapeHtml(data.diagnosis)}</p>` : ""}
+        ${data.clinicalNotes ? `<p style="font-size:13px;margin:0 0 6px;color:#333;"><strong>Notes:</strong> ${escapeHtml(data.clinicalNotes)}</p>` : ""}
+
+        ${rxRows.length > 0 ? `
+          <h3 style="margin:20px 0 8px;font-size:17px;border-bottom:2px solid #C9A227;padding-bottom:6px;">℞ Prescription</h3>
+          <table style="width:100%;border-collapse:collapse;font-size:13px;">
+            <thead><tr>
+              <th style="text-align:left;border-bottom:2px solid #333;padding:6px 8px;">Medicine</th>
+              <th style="text-align:left;border-bottom:2px solid #333;padding:6px 8px;">Dosage</th>
+              <th style="text-align:left;border-bottom:2px solid #333;padding:6px 8px;">Frequency</th>
+              <th style="text-align:left;border-bottom:2px solid #333;padding:6px 8px;">Duration</th>
+              <th style="text-align:left;border-bottom:2px solid #333;padding:6px 8px;">Instructions</th>
+            </tr></thead>
+            <tbody>${rxRows.map((r) => `<tr>
+              <td style="padding:6px 8px;border-bottom:1px solid #eee;">${escapeHtml(r.name)}</td>
+              <td style="padding:6px 8px;border-bottom:1px solid #eee;">${escapeHtml(r.dosage)}</td>
+              <td style="padding:6px 8px;border-bottom:1px solid #eee;">${escapeHtml(r.frequency)}</td>
+              <td style="padding:6px 8px;border-bottom:1px solid #eee;">${escapeHtml(r.duration)}</td>
+              <td style="padding:6px 8px;border-bottom:1px solid #eee;">${escapeHtml(r.instructions)}</td>
+            </tr>`).join("")}</tbody>
+          </table>` : ""}
+        ${data.externalPrescription ? `<p style="font-size:12.5px;margin-top:14px;"><strong>Also buy from medical store:</strong> ${escapeHtml(data.externalPrescription)}</p>` : ""}
+        <p style="margin-top:70px;font-size:12.5px;text-align:right;">Signature: ______________________</p>
+      </div>
+    `;
+    document.body.classList.add("printing-custom");
+    window.print();
+    setTimeout(() => { document.body.classList.remove("printing-custom"); win.innerHTML = ""; }, 300);
+  };
   const medValue = (c) => (c.medicines || []).reduce((s, m) => s + m.qty * m.price, 0);
   const [registerQuery, setRegisterQuery] = useState("");
   const highlightId = useRowHighlight(pendingSearch?.id);
@@ -2185,8 +2287,57 @@ function CaseRecords({ cases, addCase, updateCase, removeCase, doctors, patients
           <div><label>Shift</label><select value={form.shift} onChange={(e) => setForm({ ...form, shift: e.target.value })}>{SHIFTS.map((s) => <option key={s} value={s}>{s}</option>)}</select></div>
         </div>
         <div className="form-grid">
-          <div style={{ gridColumn: "span 2" }}><label>Brief medical history</label><input type="text" style={{ width: "100%" }} value={form.briefHistory} onChange={(e) => setForm({ ...form, briefHistory: e.target.value })} placeholder="e.g. Fever, body ache — 3 days" /></div>
-          <div style={{ gridColumn: "span 2" }}><label>Prescribed — buy from medical store</label><input type="text" style={{ width: "100%" }} value={form.externalPrescription} onChange={(e) => setForm({ ...form, externalPrescription: e.target.value })} /></div>
+          <div style={{ gridColumn: "span 2" }}>
+            <label>Brief medical history</label>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 6 }}>
+              {COMMON_COMPLAINTS.map((term) => {
+                const active = form.briefHistory.toLowerCase().split(",").map((s) => s.trim()).includes(term.toLowerCase());
+                return (
+                  <button key={term} type="button" onClick={() => setForm({ ...form, briefHistory: toggleComplaint(form.briefHistory, term) })}
+                    className={"btn secondary small" + (active ? " active-chip" : "")}
+                    style={active ? { background: "var(--primary)", color: "#fff", borderColor: "var(--primary)" } : undefined}>
+                    {term}
+                  </button>
+                );
+              })}
+            </div>
+            <input type="text" style={{ width: "100%" }} value={form.briefHistory} onChange={(e) => setForm({ ...form, briefHistory: e.target.value })} placeholder="e.g. Fever, body ache — 3 days" />
+          </div>
+        </div>
+
+        <label style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "var(--ink-soft)", textTransform: "uppercase", marginBottom: 6, marginTop: 6 }}>Vitals</label>
+        <div className="form-grid">
+          <div><label>Blood pressure</label><input type="text" placeholder="120/80" value={form.vitalsBp} onChange={(e) => setForm({ ...form, vitalsBp: e.target.value })} /></div>
+          <div><label>Pulse (bpm)</label><input type="number" value={form.vitalsPulse} onChange={(e) => setForm({ ...form, vitalsPulse: e.target.value })} /></div>
+          <div><label>Temp (°F)</label><input type="number" step="0.1" value={form.vitalsTemp} onChange={(e) => setForm({ ...form, vitalsTemp: e.target.value })} /></div>
+          <div><label>Weight (kg)</label><input type="number" step="0.1" value={form.vitalsWeight} onChange={(e) => setForm({ ...form, vitalsWeight: e.target.value })} /></div>
+          <div><label>Height (cm)</label><input type="number" step="0.1" value={form.vitalsHeight} onChange={(e) => setForm({ ...form, vitalsHeight: e.target.value })} /></div>
+          <div><label>BMI</label><input type="text" value={bmi} disabled placeholder="auto" /></div>
+        </div>
+
+        <div className="form-grid">
+          <div style={{ gridColumn: "span 2" }}><label>Diagnosis</label><input type="text" style={{ width: "100%" }} value={form.diagnosis} onChange={(e) => setForm({ ...form, diagnosis: e.target.value })} placeholder="e.g. Viral fever" /></div>
+        </div>
+        <div style={{ marginBottom: 12 }}>
+          <label>Clinical notes</label>
+          <textarea rows={3} style={{ width: "100%", fontFamily: "inherit", fontSize: 13.5, padding: "8px 10px", borderRadius: 8, border: "1px solid var(--border)", resize: "vertical" }} value={form.clinicalNotes} onChange={(e) => setForm({ ...form, clinicalNotes: e.target.value })} placeholder="Examination findings, doctor's observations…" />
+        </div>
+
+        <label style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "var(--ink-soft)", textTransform: "uppercase", marginBottom: 6 }}>Prescription (Rx)</label>
+        {rx.map((r, i) => (
+          <div key={i} style={{ display: "grid", gridTemplateColumns: "1.6fr 0.9fr 0.9fr 0.8fr 1.2fr auto", gap: 8, marginBottom: 6 }}>
+            <input type="text" placeholder="Medicine name" value={r.name} onChange={(e) => updRx(i, "name", e.target.value)} />
+            <input type="text" placeholder="Dosage e.g. 500mg" value={r.dosage} onChange={(e) => updRx(i, "dosage", e.target.value)} />
+            <input type="text" placeholder="Freq e.g. 1-0-1" value={r.frequency} onChange={(e) => updRx(i, "frequency", e.target.value)} />
+            <input type="text" placeholder="Duration" value={r.duration} onChange={(e) => updRx(i, "duration", e.target.value)} />
+            <input type="text" placeholder="Instructions" value={r.instructions} onChange={(e) => updRx(i, "instructions", e.target.value)} />
+            <button className="btn danger small" type="button" onClick={() => rmRx(i)}>✕</button>
+          </div>
+        ))}
+        <button className="btn secondary small" type="button" onClick={addRxRow}>+ Add prescription line</button>
+
+        <div className="form-grid" style={{ marginTop: 14 }}>
+          <div style={{ gridColumn: "span 2" }}><label>Prescribed — buy from medical store (free text, optional)</label><input type="text" style={{ width: "100%" }} value={form.externalPrescription} onChange={(e) => setForm({ ...form, externalPrescription: e.target.value })} /></div>
         </div>
         <label style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "var(--ink-soft)", textTransform: "uppercase", marginBottom: 6 }}>Medicines dispensed loose (clinical record only)</label>
         {meds.map((m, i) => (
@@ -2204,6 +2355,7 @@ function CaseRecords({ cases, addCase, updateCase, removeCase, doctors, patients
         </div>
         <div style={{ marginTop: 16, display: "flex", gap: 8 }}>
           {(editingId ? can("cases", "edit") : can("cases", "write")) && <button className="btn" type="button" disabled={busy} onClick={save}>{busy ? "Saving…" : editingId ? "Update case record" : "Save case record"}</button>}
+          <button className="btn secondary" type="button" onClick={() => printPrescription({ ...form, caseNo: editingId ? cases.find((c) => c.id === editingId)?.caseNo : null, prescriptions: rx })} disabled={!form.patientName.trim()}>🖨 Print prescription</button>
           {editingId && <button className="btn secondary" type="button" onClick={cancelEdit}>Cancel edit</button>}
         </div>
         <ErrorNote msg={err} />
@@ -2213,17 +2365,17 @@ function CaseRecords({ cases, addCase, updateCase, removeCase, doctors, patients
         <div className="register-toolbar">
           <h2 style={{ margin: 0 }}>Case register ({sortedCases.length} of {cases.length})</h2>
           {can("cases", "write") && <button className="btn" type="button" onClick={openAdd}>+ Add case record</button>}
-          <CustomExport rows={sortedCases} allRows={cases.map((c) => ({ ...c, medValue: medValue(c) }))} filters={viewFilters} dateField="date" doctorField="doctorName" patientField="patientName" shiftField="shift" amountField="medValue" filenameBase="case-records" printTitle="Case Records" canExport={can("cases", "export")} buildSheets={(rows) => ({ Cases: rows.map((c) => ({ CaseNo: c.caseNo, Date: c.date, Patient: c.patientName, Phone: c.phone, Doctor: c.doctorName, Shift: c.shift, History: c.briefHistory, ExternalPrescription: c.externalPrescription, MedicinesDispensedValue: c.medValue })) })} printColumns={[{ label: "Case No.", value: (c) => c.caseNo }, { label: "Date", value: (c) => c.date }, { label: "Patient", value: (c) => c.patientName }, { label: "Doctor", value: (c) => c.doctorName }, { label: "Shift", value: (c) => c.shift }, { label: "History", value: (c) => c.briefHistory }]} />
+          <CustomExport rows={sortedCases} allRows={cases.map((c) => ({ ...c, medValue: medValue(c) }))} filters={viewFilters} dateField="date" doctorField="doctorName" patientField="patientName" shiftField="shift" amountField="medValue" filenameBase="case-records" printTitle="Case Records" canExport={can("cases", "export")} buildSheets={(rows) => ({ Cases: rows.map((c) => ({ CaseNo: c.caseNo, Date: c.date, Patient: c.patientName, Phone: c.phone, Doctor: c.doctorName, Shift: c.shift, History: c.briefHistory, Diagnosis: c.diagnosis, ExternalPrescription: c.externalPrescription, MedicinesDispensedValue: c.medValue })) })} printColumns={[{ label: "Case No.", value: (c) => c.caseNo }, { label: "Date", value: (c) => c.date }, { label: "Patient", value: (c) => c.patientName }, { label: "Doctor", value: (c) => c.doctorName }, { label: "Shift", value: (c) => c.shift }, { label: "History", value: (c) => c.briefHistory }, { label: "Diagnosis", value: (c) => c.diagnosis }]} />
         </div>
         <input type="text" value={registerQuery} onChange={(e) => setRegisterQuery(e.target.value)} placeholder="Search by patient name, case no., or history" style={{ width: "100%", maxWidth: 360, marginBottom: 12 }} />
         {cases.length === 0 ? <div className="empty">No case papers recorded yet.</div> : (
           <table>
-            <thead><tr><CaseTh sortKeyName="caseNo">Case No.</CaseTh><CaseTh sortKeyName="date">Date</CaseTh><CaseTh sortKeyName="patientName">Patient</CaseTh><CaseTh sortKeyName="doctorName">Doctor</CaseTh><CaseTh sortKeyName="shift">Shift</CaseTh><CaseTh sortKeyName="briefHistory">History</CaseTh><CaseTh sortKeyName="medValue" className="num">Meds Value</CaseTh><th>Photo</th><th></th></tr></thead>
+            <thead><tr><CaseTh sortKeyName="caseNo">Case No.</CaseTh><CaseTh sortKeyName="date">Date</CaseTh><CaseTh sortKeyName="patientName">Patient</CaseTh><CaseTh sortKeyName="doctorName">Doctor</CaseTh><CaseTh sortKeyName="shift">Shift</CaseTh><CaseTh sortKeyName="briefHistory">History</CaseTh><th>Diagnosis</th><CaseTh sortKeyName="medValue" className="num">Meds Value</CaseTh><th>Photo</th><th></th></tr></thead>
             <tbody>{sortedCases.map((c) => (
               <tr key={c.id} data-row-id={c.id} className={highlightId === c.id ? "row-highlight" : undefined}><td>{c.caseNo}</td><td>{c.date}</td><td>{c.patientName}</td><td>{c.doctorName || "—"}</td>
                 <td><span className={"pill " + (c.shift || "").toLowerCase()}>{c.shift}</span></td>
-                <td style={{ maxWidth: 180 }}>{c.briefHistory}</td><td className="num">{inr(medValue(c))}</td>
-                <td>{c.image ? "📎" : "—"}</td><td style={{ display: "flex", gap: 6 }}>{can("cases", "edit") && <button className="btn secondary small" type="button" onClick={() => startEdit(c)}>Edit</button>}{can("cases", "delete") && <button className="btn danger small" type="button" onClick={() => remove(c.id)}>Delete</button>}</td></tr>
+                <td style={{ maxWidth: 180 }}>{c.briefHistory}</td><td style={{ maxWidth: 160 }}>{c.diagnosis || "—"}</td><td className="num">{inr(medValue(c))}</td>
+                <td>{c.image ? "📎" : "—"}</td><td style={{ display: "flex", gap: 6 }}><button className="btn secondary small" type="button" onClick={() => printPrescription(c)}>🖨 Print</button>{can("cases", "edit") && <button className="btn secondary small" type="button" onClick={() => startEdit(c)}>Edit</button>}{can("cases", "delete") && <button className="btn danger small" type="button" onClick={() => remove(c.id)}>Delete</button>}</td></tr>
             ))}</tbody>
           </table>
         )}
@@ -2349,7 +2501,7 @@ function PatientMaster({ can, patients, addPatient, updatePatient, removePatient
 }
 
 /* ============================== PATIENT HISTORY ============================== */
-function PatientHistory({ can, updateCase, updateCollection, cases, doctors }) {
+function PatientHistory({ can, updateCase, updateCollection, cases, doctors, settings }) {
   const { call } = useApi();
   const [editCase, setEditCase] = useState(null);
   const [editColl, setEditColl] = useState(null);
@@ -2410,6 +2562,80 @@ function PatientHistory({ can, updateCase, updateCollection, cases, doctors }) {
 
   const medValue = (c) => (c.medicines || []).reduce((s, m) => s + Number(m.qty) * Number(m.unit_price), 0);
 
+  // Same letterhead design as Case Records' printPrescription, adapted to
+  // this component's raw (snake_case, unmapped) data shape — this endpoint
+  // returns rows straight from the database rather than through mapCase.
+  const printVisit = (c) => {
+    const win = document.getElementById("print-root");
+    if (!win) { window.print(); return; }
+    const doctor = doctors.find((d) => d.id === c.doctor_id) || (c.doctor_name ? { name: c.doctor_name } : null);
+    const rxRows = (c.prescriptions || []).filter((r) => r.medicine_name && r.medicine_name.trim());
+    const dataBmi = c.vitals_weight && c.vitals_height ? (Number(c.vitals_weight) / ((Number(c.vitals_height) / 100) ** 2)).toFixed(1) : "";
+    const vitalsBits = [
+      c.vitals_bp && `BP ${c.vitals_bp}`,
+      c.vitals_pulse && `Pulse ${c.vitals_pulse} bpm`,
+      c.vitals_temp && `Temp ${c.vitals_temp}°F`,
+      c.vitals_weight && `Weight ${c.vitals_weight} kg`,
+      c.vitals_height && `Height ${c.vitals_height} cm`,
+      dataBmi && `BMI ${dataBmi}`,
+    ].filter(Boolean).map(escapeHtml).join(" &nbsp;·&nbsp; ");
+    const infoRow = (label, value) => value ? `<div><span style="color:#8A8478;">${escapeHtml(label)}</span> <strong>${escapeHtml(value)}</strong></div>` : "";
+
+    win.innerHTML = `
+      <div style="font-family:'Georgia',serif;max-width:720px;margin:0 auto;color:#222;">
+        <div style="border:1.5px solid #333;border-radius:6px;padding:16px 20px;margin-bottom:18px;">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+            <h2 style="margin:0;font-size:22px;letter-spacing:.3px;">${escapeHtml(settings?.clinicName || "Your Clinic")}</h2>
+            ${settings?.phone ? `<span style="font-size:12px;white-space:nowrap;">Mob.: ${escapeHtml(settings.phone)}</span>` : ""}
+          </div>
+          ${doctor ? `<p style="margin:6px 0 0;font-weight:700;font-size:14px;">${escapeHtml(doctor.name)}${doctor.qualifications ? ` &nbsp;<span style="font-weight:400;font-size:12px;">${escapeHtml(doctor.qualifications)}</span>` : ""}</p>` : ""}
+          <div style="display:flex;gap:16px;margin-top:2px;">
+            ${doctor?.registrationNo ? `<span style="font-size:11.5px;color:#333;">Reg. No.: ${escapeHtml(doctor.registrationNo)}</span>` : ""}
+            ${doctor?.specialization ? `<span style="font-size:12px;font-weight:600;">${escapeHtml(doctor.specialization)}</span>` : ""}
+          </div>
+          <p style="margin:6px 0 0;color:#5B6B69;font-size:11px;border-top:1px solid #ddd;padding-top:6px;">${[settings?.address, settings?.email, settings?.timings].filter(Boolean).map(escapeHtml).join(" &nbsp;·&nbsp; ")}</p>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 24px;background:#FAF8F3;border:1px solid #E5DFC8;border-radius:6px;padding:12px 16px;margin-bottom:16px;font-size:13px;">
+          ${infoRow("Case No.", c.case_no)}
+          ${infoRow("Date", d10(c.case_date))}
+          ${infoRow("Patient", c.patient_name)}
+          ${infoRow("Phone", c.phone)}
+          ${doctor ? infoRow("Doctor", doctor.name) : ""}
+          ${infoRow("Shift", c.shift)}
+        </div>
+
+        ${vitalsBits ? `<p style="font-size:12.5px;color:#333;margin:0 0 8px;"><strong>Vitals:</strong> ${vitalsBits}</p>` : ""}
+        ${c.diagnosis ? `<p style="font-size:13.5px;margin:0 0 6px;"><strong>Diagnosis:</strong> ${escapeHtml(c.diagnosis)}</p>` : ""}
+        ${c.clinical_notes ? `<p style="font-size:13px;margin:0 0 6px;color:#333;"><strong>Notes:</strong> ${escapeHtml(c.clinical_notes)}</p>` : ""}
+
+        ${rxRows.length > 0 ? `
+          <h3 style="margin:20px 0 8px;font-size:17px;border-bottom:2px solid #C9A227;padding-bottom:6px;">℞ Prescription</h3>
+          <table style="width:100%;border-collapse:collapse;font-size:13px;">
+            <thead><tr>
+              <th style="text-align:left;border-bottom:2px solid #333;padding:6px 8px;">Medicine</th>
+              <th style="text-align:left;border-bottom:2px solid #333;padding:6px 8px;">Dosage</th>
+              <th style="text-align:left;border-bottom:2px solid #333;padding:6px 8px;">Frequency</th>
+              <th style="text-align:left;border-bottom:2px solid #333;padding:6px 8px;">Duration</th>
+              <th style="text-align:left;border-bottom:2px solid #333;padding:6px 8px;">Instructions</th>
+            </tr></thead>
+            <tbody>${rxRows.map((r) => `<tr>
+              <td style="padding:6px 8px;border-bottom:1px solid #eee;">${escapeHtml(r.medicine_name)}</td>
+              <td style="padding:6px 8px;border-bottom:1px solid #eee;">${escapeHtml(r.dosage)}</td>
+              <td style="padding:6px 8px;border-bottom:1px solid #eee;">${escapeHtml(r.frequency)}</td>
+              <td style="padding:6px 8px;border-bottom:1px solid #eee;">${escapeHtml(r.duration)}</td>
+              <td style="padding:6px 8px;border-bottom:1px solid #eee;">${escapeHtml(r.instructions)}</td>
+            </tr>`).join("")}</tbody>
+          </table>` : ""}
+        ${c.external_prescription ? `<p style="font-size:12.5px;margin-top:14px;"><strong>Also buy from medical store:</strong> ${escapeHtml(c.external_prescription)}</p>` : ""}
+        <p style="margin-top:70px;font-size:12.5px;text-align:right;">Signature: ______________________</p>
+      </div>
+    `;
+    document.body.classList.add("printing-custom");
+    window.print();
+    setTimeout(() => { document.body.classList.remove("printing-custom"); win.innerHTML = ""; }, 300);
+  };
+
   const doExcel = () => {
     if (!data) return;
     exportExcel(`patient-history-${data.patient.name}`, {
@@ -2468,7 +2694,22 @@ function PatientHistory({ can, updateCase, updateCollection, cases, doctors }) {
             <div><label>Shift</label><select value={editCase.shift} onChange={(e) => setEditCase({ ...editCase, shift: e.target.value })}>{SHIFTS.map((s) => <option key={s} value={s}>{s}</option>)}</select></div>
           </div>
           <div className="form-grid">
-            <div style={{ gridColumn: "span 2" }}><label>Brief medical history</label><input type="text" style={{ width: "100%" }} value={editCase.briefHistory} onChange={(e) => setEditCase({ ...editCase, briefHistory: e.target.value })} /></div>
+            <div style={{ gridColumn: "span 2" }}>
+              <label>Brief medical history</label>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 6 }}>
+                {COMMON_COMPLAINTS.map((term) => {
+                  const active = editCase.briefHistory.toLowerCase().split(",").map((s) => s.trim()).includes(term.toLowerCase());
+                  return (
+                    <button key={term} type="button" onClick={() => setEditCase({ ...editCase, briefHistory: toggleComplaint(editCase.briefHistory, term) })}
+                      className="btn secondary small"
+                      style={active ? { background: "var(--primary)", color: "#fff", borderColor: "var(--primary)" } : undefined}>
+                      {term}
+                    </button>
+                  );
+                })}
+              </div>
+              <input type="text" style={{ width: "100%" }} value={editCase.briefHistory} onChange={(e) => setEditCase({ ...editCase, briefHistory: e.target.value })} />
+            </div>
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             <button className="btn" type="button" onClick={saveEditCase}>Update visit</button>
@@ -2520,11 +2761,11 @@ function PatientHistory({ can, updateCase, updateCollection, cases, doctors }) {
                 <h2>Visit history ({data.cases.length})</h2>
                 {data.cases.length === 0 ? <div className="empty">No visits in this range.</div> : (
                   <table>
-                    <thead><tr><th>Case No.</th><th>Date</th><th>Doctor</th><th>Shift</th><th>History</th><th className="num">Meds Value</th><th></th></tr></thead>
+                    <thead><tr><th>Case No.</th><th>Date</th><th>Doctor</th><th>Shift</th><th>History</th><th>Diagnosis</th><th className="num">Meds Value</th><th></th></tr></thead>
                     <tbody>{data.cases.map((c) => (
                       <tr key={c.id}><td>{c.case_no}</td><td>{d10(c.case_date)}</td><td>{c.doctor_name || "—"}</td>
                         <td><span className={"pill " + (c.shift || "").toLowerCase()}>{c.shift}</span></td>
-                        <td style={{ maxWidth: 200 }}>{c.brief_history}</td><td className="num">{inr(medValue(c))}</td><td>{can("cases", "edit") && <button className="btn secondary small" type="button" onClick={() => startEditCase(c)}>Edit</button>}</td></tr>
+                        <td style={{ maxWidth: 200 }}>{c.brief_history}</td><td style={{ maxWidth: 160 }}>{c.diagnosis || "—"}</td><td className="num">{inr(medValue(c))}</td><td style={{ display: "flex", gap: 6 }}><button className="btn secondary small" type="button" onClick={() => printVisit(c)}>🖨 Print</button>{can("cases", "edit") && <button className="btn secondary small" type="button" onClick={() => startEditCase(c)}>Edit</button>}</td></tr>
                     ))}</tbody>
                   </table>
                 )}
@@ -2761,7 +3002,7 @@ function RollupTable({ title, rows }) {
 /* ============================== DOCTOR SHIFTS & PAY ============================== */
 function DoctorShifts({ doctors, addDoctor, updateDoctor, removeDoctor, doctorPays, addDoctorPay, updateDoctorPay, removeDoctorPay, can }) {
   const { call } = useApi();
-  const [d, setD] = useState({ name: "", shift: "Morning", payType: "Daily", rate: "" });
+  const [d, setD] = useState({ name: "", shift: "Morning", payType: "Daily", rate: "", registrationNo: "", qualifications: "", specialization: "" });
   const [p, setP] = useState({ date: todayISO(), doctorId: "", amount: "" });
   const [err, setErr] = useState(""); const [busy, setBusy] = useState(false);
   const [last14, setLast14] = useState([]);
@@ -2780,16 +3021,16 @@ function DoctorShifts({ doctors, addDoctor, updateDoctor, removeDoctor, doctorPa
   const [editingPayId, setEditingPayId] = useState(null);
   const [docPanelOpen, setDocPanelOpen] = useState(false);
   const [payPanelOpen, setPayPanelOpen] = useState(false);
-  const openAddDoc = () => { setEditingDocId(null); setD({ name: "", shift: "Morning", payType: "Daily", rate: "" }); setErr(""); setDocPanelOpen(true); };
-  const startEditDoc = (x) => { setEditingDocId(x.id); setD({ name: x.name, shift: x.shift, payType: x.payType, rate: String(x.rate) }); setErr(""); setDocPanelOpen(true); };
-  const cancelEditDoc = () => { setEditingDocId(null); setD({ name: "", shift: "Morning", payType: "Daily", rate: "" }); setErr(""); setDocPanelOpen(false); };
+  const openAddDoc = () => { setEditingDocId(null); setD({ name: "", shift: "Morning", payType: "Daily", rate: "", registrationNo: "", qualifications: "", specialization: "" }); setErr(""); setDocPanelOpen(true); };
+  const startEditDoc = (x) => { setEditingDocId(x.id); setD({ name: x.name, shift: x.shift, payType: x.payType, rate: String(x.rate), registrationNo: x.registrationNo || "", qualifications: x.qualifications || "", specialization: x.specialization || "" }); setErr(""); setDocPanelOpen(true); };
+  const cancelEditDoc = () => { setEditingDocId(null); setD({ name: "", shift: "Morning", payType: "Daily", rate: "", registrationNo: "", qualifications: "", specialization: "" }); setErr(""); setDocPanelOpen(false); };
   const addDoc = async () => {
     setErr(""); if (!d.name.trim()) return; setBusy(true);
-    const payload = { name: d.name, shift: d.shift, payType: d.payType, rate: Number(d.rate) || 0 };
+    const payload = { name: d.name, shift: d.shift, payType: d.payType, rate: Number(d.rate) || 0, registrationNo: d.registrationNo, qualifications: d.qualifications, specialization: d.specialization };
     try {
       if (editingDocId) { await updateDoctor(editingDocId, payload); setEditingDocId(null); }
       else { await addDoctor(payload); }
-      setD({ name: "", shift: "Morning", payType: "Daily", rate: "" }); setDocPanelOpen(false);
+      setD({ name: "", shift: "Morning", payType: "Daily", rate: "", registrationNo: "", qualifications: "", specialization: "" }); setDocPanelOpen(false);
     } catch (e) { setErr(e.message); }
     setBusy(false);
   };
@@ -2817,7 +3058,11 @@ function DoctorShifts({ doctors, addDoctor, updateDoctor, removeDoctor, doctorPa
           <div><label>Shift</label><select value={d.shift} onChange={(e) => setD({ ...d, shift: e.target.value })}>{SHIFTS.map((s) => <option key={s} value={s}>{s}</option>)}</select></div>
           <div><label>Pay type</label><select value={d.payType} onChange={(e) => setD({ ...d, payType: e.target.value })}>{PAY_TYPES.map((s) => <option key={s} value={s}>{s}</option>)}</select></div>
           <div><label>Rate (₹)</label><input type="number" value={d.rate} onChange={(e) => setD({ ...d, rate: e.target.value })} /></div>
+          <div><label>Medical registration no.</label><input type="text" placeholder="e.g. I-57704-A" value={d.registrationNo} onChange={(e) => setD({ ...d, registrationNo: e.target.value })} /></div>
+          <div><label>Qualifications</label><input type="text" placeholder="e.g. B.A.M.S., C.C.H." value={d.qualifications} onChange={(e) => setD({ ...d, qualifications: e.target.value })} /></div>
+          <div><label>Specialization</label><input type="text" placeholder="e.g. Family Physician & Surgeon" value={d.specialization} onChange={(e) => setD({ ...d, specialization: e.target.value })} /></div>
         </div>
+        <p style={{ fontSize: 12, color: "var(--ink-soft)", marginTop: -8 }}>Registration number, qualifications, and specialization are optional but print on this doctor's prescriptions — required for a legally valid prescription in India.</p>
         <div style={{ display: "flex", gap: 8 }}>
           {(editingDocId ? can("doctorPay", "edit") : can("doctorPay", "write")) && <button className="btn" type="button" disabled={busy} onClick={addDoc}>{editingDocId ? "Update doctor" : "Add doctor"}</button>}
           {editingDocId && <button className="btn secondary" type="button" onClick={cancelEditDoc}>Cancel edit</button>}
@@ -2830,7 +3075,7 @@ function DoctorShifts({ doctors, addDoctor, updateDoctor, removeDoctor, doctorPa
           {can("doctorPay", "write") && <button className="btn" type="button" onClick={openAddDoc}>+ Add doctor</button>}
         </div>
         <table style={{ marginTop: 14 }}><thead><tr><th>Name</th><th>Shift</th><th>Pay type</th><th className="num">Rate</th><th></th></tr></thead>
-          <tbody>{doctors.map((x) => (<tr key={x.id}><td>{x.name}</td><td><span className={"pill " + x.shift.toLowerCase()}>{x.shift}</span></td><td>{x.payType}</td><td className="num">{inr(x.rate)}</td><td style={{ display: "flex", gap: 6 }}>{can("doctorPay", "edit") && <button className="btn secondary small" type="button" onClick={() => startEditDoc(x)}>Edit</button>}{can("doctorPay", "delete") && <button className="btn danger small" type="button" onClick={() => delDoc(x.id)}>Delete</button>}</td></tr>))}</tbody>
+          <tbody>{doctors.map((x) => (<tr key={x.id}><td>{x.name}{x.registrationNo ? <div style={{ fontSize: 11, color: "var(--ink-soft)" }}>Reg. {x.registrationNo}</div> : null}</td><td><span className={"pill " + x.shift.toLowerCase()}>{x.shift}</span></td><td>{x.payType}</td><td className="num">{inr(x.rate)}</td><td style={{ display: "flex", gap: 6 }}>{can("doctorPay", "edit") && <button className="btn secondary small" type="button" onClick={() => startEditDoc(x)}>Edit</button>}{can("doctorPay", "delete") && <button className="btn danger small" type="button" onClick={() => delDoc(x.id)}>Delete</button>}</td></tr>))}</tbody>
         </table>
       </div>
       <SlideOverPanel open={payPanelOpen} onClose={cancelEditPay} title={editingPayId ? "Edit pay entry" : "Log a pay entry"}>
@@ -3382,7 +3627,10 @@ function SettingsPage({ settings, updateSettings, session, origin, capital, addC
           <div><label>Proprietor / Head doctor</label><input type="text" value={form.proprietor} onChange={(e) => setForm({ ...form, proprietor: e.target.value })} disabled={!canEditSettings} /></div>
           <div><label>Address</label><input type="text" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} disabled={!canEditSettings} /></div>
           <div><label>Phone</label><input type="tel" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} disabled={!canEditSettings} /></div>
+          <div><label>Email</label><input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} disabled={!canEditSettings} /></div>
+          <div><label>Timings</label><input type="text" placeholder="Morn. 9:30–1:00 · Even. 4:00–9:30" value={form.timings} onChange={(e) => setForm({ ...form, timings: e.target.value })} disabled={!canEditSettings} /></div>
         </div>
+        <p style={{ fontSize: 12, color: "var(--ink-soft)", marginTop: -8 }}>Email and timings are optional — shown on the printed prescription letterhead if filled in.</p>
         {canEditSettings ? <button className="btn" type="button" disabled={busy} onClick={save}>Save profile</button> : <div className="note-box">Only Admin or Doctor roles can edit the clinic profile.</div>}
         <ErrorNote msg={err} />
       </div>
