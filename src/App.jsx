@@ -1607,6 +1607,44 @@ function LauncherGrid({ settings, session, can, setView, setPendingSearch, cases
     { label: "🧾 Add expense", view: "expenses" },
   ].filter((a) => { const nav = NAV.find((n) => n.key === a.view); return !nav?.module || can(nav.module, "write"); });
 
+  // ---- Collections Summary widget — its own month/year filter ----
+  const [summaryMonth, setSummaryMonth] = useState(t.slice(0, 7)); // "YYYY-MM"
+  const isCurrentSummaryMonth = summaryMonth === t.slice(0, 7);
+  const daysInSummaryMonth = new Date(Number(summaryMonth.slice(0, 4)), Number(summaryMonth.slice(5, 7)), 0).getDate();
+  const summaryMonthStart = `${summaryMonth}-01`;
+  const summaryMonthEnd = isCurrentSummaryMonth ? t : `${summaryMonth}-${String(daysInSummaryMonth).padStart(2, "0")}`;
+  const summaryMonthLabel = new Date(`${summaryMonth}-01T00:00:00`).toLocaleDateString("en-IN", { month: "long", year: "numeric" });
+
+  const caseByIdSummary = useMemo(() => Object.fromEntries(cases.map((c) => [c.id, c])), [cases]);
+  const enrichForSummary = (c) => { const linked = c.caseId ? caseByIdSummary[c.caseId] : null; return { ...c, shift: linked?.shift || "", doctorName: linked?.doctorName || "" }; };
+
+  const summaryWeekCollections = useMemo(() => collections.filter((c) => c.date >= weekStart && c.date <= t).map(enrichForSummary), [collections, weekStart, t, caseByIdSummary]);
+  const summaryMonthCollections = useMemo(() => collections.filter((c) => c.date >= summaryMonthStart && c.date <= summaryMonthEnd).map(enrichForSummary), [collections, summaryMonthStart, summaryMonthEnd, caseByIdSummary]);
+
+  const summaryWeekTotal = summaryWeekCollections.reduce((s, c) => s + Number(c.amountCollected || 0), 0);
+  const summaryMonthTotal = summaryMonthCollections.reduce((s, c) => s + Number(c.amountCollected || 0), 0);
+  const summaryShiftTotals = { Morning: 0, Evening: 0 };
+  summaryMonthCollections.forEach((c) => { if (c.shift === "Morning" || c.shift === "Evening") summaryShiftTotals[c.shift] += Number(c.amountCollected || 0); });
+  const summaryModeTotals = {};
+  COLLECTION_MODES.forEach((m) => { summaryModeTotals[m] = 0; });
+  summaryMonthCollections.forEach((c) => { const m = c.mode || "Other"; summaryModeTotals[m] = (summaryModeTotals[m] || 0) + Number(c.amountCollected || 0); });
+  const summaryDoctorTotals = {};
+  summaryMonthCollections.forEach((c) => { const name = c.doctorName || "Unassigned"; summaryDoctorTotals[name] = (summaryDoctorTotals[name] || 0) + Number(c.amountCollected || 0); });
+  const summaryDoctorRows = Object.entries(summaryDoctorTotals).sort((a, b) => b[1] - a[1]);
+
+  // Reuses the exact same DrillDownPanel component as the Dashboard page —
+  // not a re-implementation — so the total-calculation logic (previously
+  // buggy for Outstanding Due) can never drift out of sync between the two.
+  const [summaryDrill, setSummaryDrill] = useState(null);
+  const openSummaryDrill = ({ mode, doctorName, shift, start, end, label }) => {
+    let rows = collections.filter((c) => c.date >= start && c.date <= end).map(enrichForSummary);
+    let title = `All Collections — ${label}`;
+    if (mode) { rows = rows.filter((c) => (c.mode || "Other") === mode); title = `${mode} Collections — ${label}`; }
+    else if (shift) { rows = rows.filter((c) => c.shift === shift); title = `${shift} Collections — ${label}`; }
+    else if (doctorName) { rows = rows.filter((c) => (c.doctorName || "Unassigned") === doctorName); title = `${doctorName} — ${label}`; }
+    setSummaryDrill({ title, kind: "collections", rows });
+  };
+
   const Tile = ({ n }) => {
     return (
       <button className="launcher-tile" onClick={() => setView(n.key)} title={n.desc}>
@@ -1717,6 +1755,64 @@ function LauncherGrid({ settings, session, can, setView, setPendingSearch, cases
             <div className="role-stat" onClick={() => setView("collections")}><span className="role-stat-value">{myPendingCaseBookings}</span><span className="role-stat-label">Case records pending billing</span></div>
           </div>
           {!myDoctorId && <p style={{ fontSize: 12, color: "var(--ink-soft)", marginTop: 8, marginBottom: 0 }}>Showing clinic-wide numbers — ask an Admin to link your account to your doctor profile under User Approvals for your own numbers here.</p>}
+        </div>
+      )}
+
+      {can("collections", "view") && (
+        <div className="card">
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10, marginBottom: 4 }}>
+            <h2 style={{ margin: 0 }}>💰 Collections Summary</h2>
+            <div className="no-print" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--primary-dark)" }}>{summaryMonthLabel}</span>
+              <input type="month" value={summaryMonth} onChange={(e) => setSummaryMonth(e.target.value)} style={{ fontSize: 11.5, padding: "4px 6px", borderRadius: 6, border: "1px solid var(--border)" }} />
+            </div>
+          </div>
+          <p style={{ fontSize: 12, color: "var(--ink-soft)", marginTop: 0, marginBottom: 14 }}>Click any amount for the exact records behind it, with export/print.</p>
+
+          <div className="role-panel-stats" style={{ marginBottom: 20 }}>
+            <div className="role-stat" onClick={() => openSummaryDrill({ start: weekStart, end: t, label: "This Week" })}><span className="role-stat-value">{inr(summaryWeekTotal)}</span><span className="role-stat-label">This week</span></div>
+            <div className="role-stat" onClick={() => openSummaryDrill({ start: summaryMonthStart, end: summaryMonthEnd, label: summaryMonthLabel })}><span className="role-stat-value">{inr(summaryMonthTotal)}</span><span className="role-stat-label">{summaryMonthLabel}</span></div>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 22 }}>
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: ".05em", textTransform: "uppercase", color: "var(--ink-soft)", marginBottom: 8 }}>By Shift — {summaryMonthLabel}</div>
+              <table><tbody>
+                {["Morning", "Evening"].map((s) => (
+                  <tr key={s} style={{ cursor: "pointer" }} onClick={() => openSummaryDrill({ shift: s, start: summaryMonthStart, end: summaryMonthEnd, label: summaryMonthLabel })}>
+                    <td style={{ textDecoration: "underline", textDecorationStyle: "dotted", textDecorationColor: "var(--ink-soft)" }}>{s}</td>
+                    <td className="num">{inr(summaryShiftTotals[s])}</td>
+                  </tr>
+                ))}
+              </tbody></table>
+            </div>
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: ".05em", textTransform: "uppercase", color: "var(--ink-soft)", marginBottom: 8 }}>By Mode — {summaryMonthLabel}</div>
+              <table><tbody>
+                {COLLECTION_MODES.map((m) => (
+                  <tr key={m} style={{ cursor: "pointer" }} onClick={() => openSummaryDrill({ mode: m, start: summaryMonthStart, end: summaryMonthEnd, label: summaryMonthLabel })}>
+                    <td style={{ textDecoration: "underline", textDecorationStyle: "dotted", textDecorationColor: "var(--ink-soft)" }}>{MODE_ICONS[m]} {m}</td>
+                    <td className="num">{inr(summaryModeTotals[m])}</td>
+                  </tr>
+                ))}
+              </tbody></table>
+            </div>
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: ".05em", textTransform: "uppercase", color: "var(--ink-soft)", marginBottom: 8 }}>By Doctor — {summaryMonthLabel}</div>
+              {summaryDoctorRows.length === 0 ? <p style={{ fontSize: 12.5, color: "var(--ink-soft)" }}>No collections this month.</p> : (
+                <table><tbody>
+                  {summaryDoctorRows.map(([name, amt]) => (
+                    <tr key={name} style={{ cursor: "pointer" }} onClick={() => openSummaryDrill({ doctorName: name, start: summaryMonthStart, end: summaryMonthEnd, label: summaryMonthLabel })}>
+                      <td style={{ textDecoration: "underline", textDecorationStyle: "dotted", textDecorationColor: "var(--ink-soft)" }}>{name}</td>
+                      <td className="num">{inr(amt)}</td>
+                    </tr>
+                  ))}
+                </tbody></table>
+              )}
+            </div>
+          </div>
+
+          {summaryDrill && <DrillDownPanel drill={summaryDrill} onClose={() => setSummaryDrill(null)} />}
         </div>
       )}
 
