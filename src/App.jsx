@@ -1274,12 +1274,14 @@ export default function App() {
 }
 
 /* ============================== DASHBOARD ============================== */
-/** Computes mode-wise collection, outstanding dues, expenses, and net
- *  profit for whatever date range [start,end] is passed in. Net profit here
- *  = total revenue billed (collected + still outstanding) minus expenses
- *  logged in that same window — a quick operational view, not the full
- *  Income Statement (which also nets off doctor pay and depreciation). */
-function periodSummary(collections, expenses, start, end) {
+/** Computes mode-wise collection, outstanding dues, expenses (including
+ *  Doctor Pay — folded in per explicit request, see categoryExpenseTotal/
+ *  doctorPayTotal for the breakdown), and net profit for whatever date
+ *  range [start,end] is passed in. Net profit here = total revenue billed
+ *  (collected + still outstanding) minus expenses+doctor pay logged in that
+ *  same window — a quick operational view, not the full Income Statement
+ *  (which also nets off depreciation). */
+function periodSummary(collections, expenses, doctorPays, start, end) {
   const rows = collections.filter((c) => c.date >= start && c.date <= end);
   const modeTotals = {};
   COLLECTION_MODES.forEach((m) => { modeTotals[m] = 0; });
@@ -1288,10 +1290,16 @@ function periodSummary(collections, expenses, start, end) {
     modeTotals[c.mode || "Other"] = (modeTotals[c.mode || "Other"] || 0) + Number(c.amountCollected || 0);
     outstanding += Number(c.balance || 0);
   });
-  const expenseTotal = expenses.filter((e) => e.date >= start && e.date <= end).reduce((s, e) => s + Number(e.amount || 0), 0);
+  const categoryExpenseTotal = expenses.filter((e) => e.date >= start && e.date <= end).reduce((s, e) => s + Number(e.amount || 0), 0);
+  const doctorPayTotal = (doctorPays || []).filter((p) => p.date >= start && p.date <= end).reduce((s, p) => s + Number(p.amount || 0), 0);
+  // "Expenses" as shown on the Dashboard now includes Doctor Pay, per explicit
+  // request — categoryExpenseTotal/doctorPayTotal stay available separately
+  // so the combined figure is never opaque; the drill-down shows both kinds
+  // of rows together too.
+  const expenseTotal = categoryExpenseTotal + doctorPayTotal;
   const collectedTotal = Object.values(modeTotals).reduce((s, v) => s + v, 0);
   const netProfit = collectedTotal + outstanding - expenseTotal;
-  return { modeTotals, outstanding, expenseTotal, netProfit, collectedTotal };
+  return { modeTotals, outstanding, expenseTotal, categoryExpenseTotal, doctorPayTotal, netProfit, collectedTotal };
 }
 
 const MODE_ICONS = { Cash: "💵", UPI: "📱", Card: "💳", Other: "🧾" };
@@ -1352,7 +1360,7 @@ function PeriodCard({ title, summary, start, end, onDrill, headerExtra }) {
           ))}
           <Row label="Collected total" value={summary.collectedTotal} kind="collected" bold borderTop="1px" />
           <Row label="+ Outstanding due" value={summary.outstanding} kind="outstanding" />
-          <Row label="− Expenses" value={summary.expenseTotal} kind="expenses" color="var(--expense)" />
+          <Row label="− Expenses (incl. Doctor Pay)" value={summary.expenseTotal} kind="expenses" color="var(--expense)" />
           <tr style={{ fontWeight: 700, borderTop: "2px solid var(--accent)" }}>
             <td>{summary.netProfit >= 0 ? "📈" : "📉"} Net Profit</td>
             <td className="num" style={{ color: summary.netProfit >= 0 ? "var(--income)" : "var(--expense)" }}>{inr(summary.netProfit)}</td>
@@ -1888,17 +1896,17 @@ function Dashboard({ settings, collections, referrals, expenses, doctorPays, cas
   const weekEnd = `${weekMonth}-${String(weekEndDay).padStart(2, "0")}`;
   const weekMonthLabel = new Date(`${weekMonth}-01T00:00:00`).toLocaleDateString("en-IN", { month: "short", year: "numeric" });
 
-  const todaySummary = periodSummary(collections, expenses, t, t);
-  const yestSummary = periodSummary(collections, expenses, yest, yest);
-  const twoDaysAgoSummary = periodSummary(collections, expenses, twoDaysAgo, twoDaysAgo);
-  const weekSummary = periodSummary(collections, expenses, weekStart, weekEnd);
+  const todaySummary = periodSummary(collections, expenses, doctorPays, t, t);
+  const yestSummary = periodSummary(collections, expenses, doctorPays, yest, yest);
+  const twoDaysAgoSummary = periodSummary(collections, expenses, doctorPays, twoDaysAgo, twoDaysAgo);
+  const weekSummary = periodSummary(collections, expenses, doctorPays, weekStart, weekEnd);
   // Always the true "last 7 days," independent of the Week-of-month dropdown above —
   // used only for the top insight banner and KPI cards, which should never silently
   // change meaning just because someone picked a different week to look back at.
   const rollingWeekStart = (() => { const d = new Date(); d.setDate(d.getDate() - 6); return localISO(d); })();
-  const rollingWeekSummary = periodSummary(collections, expenses, rollingWeekStart, t);
-  const monthSummary = periodSummary(collections, expenses, snapMonthStart, snapMonthEnd);
-  const yearSummary = periodSummary(collections, expenses, range.start, range.end);
+  const rollingWeekSummary = periodSummary(collections, expenses, doctorPays, rollingWeekStart, t);
+  const monthSummary = periodSummary(collections, expenses, doctorPays, snapMonthStart, snapMonthEnd);
+  const yearSummary = periodSummary(collections, expenses, doctorPays, range.start, range.end);
 
   const caseById = useMemo(() => Object.fromEntries(cases.map((c) => [c.id, c])), [cases]);
   const enrichCollection = (c) => { const linked = c.caseId ? caseById[c.caseId] : null; return { ...c, shift: linked?.shift || "", doctorName: linked?.doctorName || "" }; };
@@ -1906,7 +1914,10 @@ function Dashboard({ settings, collections, referrals, expenses, doctorPays, cas
   const openDrill = ({ kind, mode, doctorName, start, end, label }) => {
     const inRange = (d) => (!start || d >= start) && (!end || d <= end);
     if (kind === "expenses") {
-      setDrill({ title: `Expenses — ${label}`, kind: "expenses", rows: expenses.filter((e) => inRange(e.date)) });
+      const expenseRows = expenses.filter((e) => inRange(e.date));
+      const doctorPayRows = doctorPays.filter((p) => inRange(p.date)).map((p) => ({ date: p.date, category: "Doctor Pay", narration: p.doctorName, amount: p.amount }));
+      const rows = [...expenseRows, ...doctorPayRows].sort((a, b) => (a.date < b.date ? 1 : -1));
+      setDrill({ title: `Expenses (incl. Doctor Pay) — ${label}`, kind: "expenses", rows });
       return;
     }
     let rows = collections.filter((c) => inRange(c.date)).map(enrichCollection);
@@ -1931,11 +1942,13 @@ function Dashboard({ settings, collections, referrals, expenses, doctorPays, cas
   const trendData = [];
   for (let day = 1; day <= lastTrendDay; day++) {
     const iso = `${trendMonth}-${String(day).padStart(2, "0")}`;
-    const s = periodSummary(collections, [], iso, iso);
+    const s = periodSummary(collections, [], [], iso, iso);
     trendData.push({ day, amount: s.collectedTotal + s.outstanding });
   }
   const expenseByCat = {};
   expenses.filter((e) => e.date >= range.start && e.date <= range.end).forEach((e) => { expenseByCat[e.category] = (expenseByCat[e.category] || 0) + Number(e.amount); });
+  const doctorPayInFY = doctorPays.filter((p) => p.date >= range.start && p.date <= range.end).reduce((s, p) => s + Number(p.amount || 0), 0);
+  if (doctorPayInFY > 0) expenseByCat["Doctor Pay"] = doctorPayInFY;
   const pieData = Object.entries(expenseByCat).map(([name, value]) => ({ name, value }));
 
   const collectionPieData = [
@@ -1946,14 +1959,14 @@ function Dashboard({ settings, collections, referrals, expenses, doctorPays, cas
   // Previous 7 days (before this week), for the "up/down vs last week" insight
   const prevWeekEnd = (() => { const d = new Date(); d.setDate(d.getDate() - 7); return localISO(d); })();
   const prevWeekStart = (() => { const d = new Date(); d.setDate(d.getDate() - 13); return localISO(d); })();
-  const prevWeekSummary = periodSummary(collections, expenses, prevWeekStart, prevWeekEnd);
+  const prevWeekSummary = periodSummary(collections, expenses, doctorPays, prevWeekStart, prevWeekEnd);
   const weekChangePct = prevWeekSummary.collectedTotal > 0
     ? Math.round(((rollingWeekSummary.collectedTotal - prevWeekSummary.collectedTotal) / prevWeekSummary.collectedTotal) * 100)
     : null;
 
   // Sparkline series: last 14 days of collected+expense, for the KPI cards
   const last14Spark = [];
-  for (let i = 13; i >= 0; i--) { const dt = new Date(); dt.setDate(dt.getDate() - i); const iso = localISO(dt); const s = periodSummary(collections, expenses, iso, iso); last14Spark.push({ collected: s.collectedTotal, expense: s.expenseTotal, net: s.netProfit }); }
+  for (let i = 13; i >= 0; i--) { const dt = new Date(); dt.setDate(dt.getDate() - i); const iso = localISO(dt); const s = periodSummary(collections, expenses, doctorPays, iso, iso); last14Spark.push({ collected: s.collectedTotal, expense: s.expenseTotal, net: s.netProfit }); }
   const sparkCollected = last14Spark.map((s) => ({ v: s.collected }));
   const sparkExpense = last14Spark.map((s) => ({ v: s.expense }));
   const sparkOutstanding = last14Spark.map(() => ({ v: outstanding })); // flat — overall figure, shown for shape consistency
@@ -2021,7 +2034,7 @@ function Dashboard({ settings, collections, referrals, expenses, doctorPays, cas
             ? <>Welcome back — here's how {settings.clinicName || "the clinic"} is doing right now.</>
             : <>Collections are <b>{weekChangePct >= 0 ? "up" : "down"} {Math.abs(weekChangePct)}%</b> this week vs last week.</>}
           {" "}Outstanding dues stand at <b>{inr(outstanding)}</b>.
-          {expenseByCat && Object.keys(expenseByCat).length > 0 && <> Expenses this FY: <b>{inr(Object.values(expenseByCat).reduce((s, v) => s + v, 0))}</b>.</>}
+          {expenseByCat && Object.keys(expenseByCat).length > 0 && <> Expenses this FY (incl. Doctor Pay): <b>{inr(Object.values(expenseByCat).reduce((s, v) => s + v, 0))}</b>.</>}
         </span>
       </div>
 
@@ -2030,7 +2043,7 @@ function Dashboard({ settings, collections, referrals, expenses, doctorPays, cas
         <KpiCard icon="⚠️" label="Outstanding Dues" value={inr(outstanding)} color="var(--accent)" hint="Total unpaid balance across every collection entry, all time" onClick={() => openDrill({ kind: "outstanding", label: "All Time" })} />
         <KpiCard icon={(netProfit ?? 0) >= 0 ? "📈" : "📉"} label={`Net Profit (FY ${fy})`} value={netProfit === null ? "…" : inr(netProfit)} color={(netProfit ?? 0) >= 0 ? "#1F8A5F" : "#B3423A"} sparkline={last14Spark.map((s) => ({ v: s.net }))} sparklineColor={(netProfit ?? 0) >= 0 ? "#1F8A5F" : "#B3423A"} hint="Full P&L net profit for the financial year — click for the full Income Statement, with its own custom-range PDF/Excel export" onClick={() => setView("statements")} />
         <KpiCard icon="💰" label="This Week's Collection" value={inr(rollingWeekSummary.collectedTotal)} color="var(--primary-dark)" sparkline={sparkCollected} hint="Cash actually collected in the last 7 days" onClick={() => openDrill({ kind: "collected", start: rollingWeekStart, end: t, label: "This Week" })} />
-        <KpiCard icon="🧾" label="This Week's Expenses" value={inr(rollingWeekSummary.expenseTotal)} color="var(--expense)" sparkline={sparkExpense} sparklineColor="var(--expense)" hint="Expenses logged in the last 7 days" onClick={() => openDrill({ kind: "expenses", start: rollingWeekStart, end: t, label: "This Week" })} />
+        <KpiCard icon="🧾" label="This Week's Expenses" value={inr(rollingWeekSummary.expenseTotal)} color="var(--expense)" sparkline={sparkExpense} sparklineColor="var(--expense)" hint="Expenses + Doctor Pay logged in the last 7 days" onClick={() => openDrill({ kind: "expenses", start: rollingWeekStart, end: t, label: "This Week" })} />
       </div>
 
       {drill && <DrillDownPanel drill={drill} onClose={() => setDrill(null)} />}
