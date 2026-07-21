@@ -1626,10 +1626,8 @@ function LauncherGrid({ settings, session, can, setView, setPendingSearch, cases
   const caseByIdSummary = useMemo(() => Object.fromEntries(cases.map((c) => [c.id, c])), [cases]);
   const enrichForSummary = (c) => { const linked = c.caseId ? caseByIdSummary[c.caseId] : null; return { ...c, shift: linked?.shift || "", doctorName: linked?.doctorName || "" }; };
 
-  const summaryWeekCollections = useMemo(() => collections.filter((c) => c.date >= weekStart && c.date <= t).map(enrichForSummary), [collections, weekStart, t, caseByIdSummary]);
   const summaryMonthCollections = useMemo(() => collections.filter((c) => c.date >= summaryMonthStart && c.date <= summaryMonthEnd).map(enrichForSummary), [collections, summaryMonthStart, summaryMonthEnd, caseByIdSummary]);
 
-  const summaryWeekTotal = summaryWeekCollections.reduce((s, c) => s + Number(c.amountCollected || 0), 0);
   const summaryMonthTotal = summaryMonthCollections.reduce((s, c) => s + Number(c.amountCollected || 0), 0);
   const summaryShiftTotals = { Morning: 0, Evening: 0 };
   summaryMonthCollections.forEach((c) => { if (c.shift === "Morning" || c.shift === "Evening") summaryShiftTotals[c.shift] += Number(c.amountCollected || 0); });
@@ -1778,7 +1776,6 @@ function LauncherGrid({ settings, session, can, setView, setPendingSearch, cases
           <p style={{ fontSize: 12, color: "var(--ink-soft)", marginTop: 0, marginBottom: 14 }}>Click any amount for the exact records behind it, with export/print.</p>
 
           <div className="role-panel-stats" style={{ marginBottom: 20 }}>
-            <div className="role-stat" onClick={() => openSummaryDrill({ start: weekStart, end: t, label: "This Week" })}><span className="role-stat-value">{inr(summaryWeekTotal)}</span><span className="role-stat-label">This week</span></div>
             <div className="role-stat" onClick={() => openSummaryDrill({ start: summaryMonthStart, end: summaryMonthEnd, label: summaryMonthLabel })}><span className="role-stat-value">{inr(summaryMonthTotal)}</span><span className="role-stat-label">{summaryMonthLabel}</span></div>
           </div>
 
