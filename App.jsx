@@ -1374,7 +1374,12 @@ function DrillDownPanel({ drill, onClose }) {
     ? [{ label: "Date", value: (r) => r.date }, { label: "Category", value: (r) => r.category }, { label: "Narration", value: (r) => r.narration }, { label: "Amount", value: (r) => inr(r.amount) }]
     : [{ label: "Date", value: (r) => r.date }, { label: "Case No.", value: (r) => r.caseNo || "—" }, { label: "Patient", value: (r) => r.patientName }, { label: "Shift", value: (r) => r.shift || "—" }, { label: "Doctor", value: (r) => r.doctorName || "—" }, { label: "Mode", value: (r) => r.mode }, { label: "Due", value: (r) => inr(r.amountDue) }, { label: "Collected", value: (r) => inr(r.amountCollected) }, { label: "Balance", value: (r) => inr(r.balance) }];
   const numericLabels = ["Amount", "Due", "Collected", "Balance"];
-  const total = isExpense ? drill.rows.reduce((s, r) => s + Number(r.amount || 0), 0) : drill.rows.reduce((s, r) => s + Number(r.amountCollected || 0), 0);
+  const total = isExpense
+    ? drill.rows.reduce((s, r) => s + Number(r.amount || 0), 0)
+    : drill.kind === "outstanding"
+      ? drill.rows.reduce((s, r) => s + Number(r.balance || 0), 0)
+      : drill.rows.reduce((s, r) => s + Number(r.amountCollected || 0), 0);
+  const totalLabel = isExpense ? "" : drill.kind === "outstanding" ? " outstanding" : " collected";
 
   const viewImage = async (path) => {
     if (!path) return;
@@ -1395,7 +1400,7 @@ function DrillDownPanel({ drill, onClose }) {
     const rowsHtml = drill.rows.map((r) => `<tr>${columns.map((c) => `<td>${escapeHtml(c.value(r))}</td>`).join("")}</tr>`).join("");
     win.innerHTML = `
       <h2>${escapeHtml(drill.title)}</h2>
-      <p style="color:#5B6B69;font-size:12px;">${drill.rows.length} record(s) — total ${inr(total)}</p>
+      <p style="color:#5B6B69;font-size:12px;">${drill.rows.length} record(s) — total ${inr(total)}${totalLabel}</p>
       <table style="width:100%;border-collapse:collapse;font-size:12px;">
         <thead><tr>${columns.map((c) => `<th style="text-align:left;border-bottom:2px solid #C9A227;padding:5px 6px;">${escapeHtml(c.label)}</th>`).join("")}</tr></thead>
         <tbody>${rowsHtml}</tbody>
@@ -1408,7 +1413,7 @@ function DrillDownPanel({ drill, onClose }) {
   return (
     <div className="card" style={{ borderColor: "var(--accent)", borderWidth: 2 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 10 }}>
-        <h2 style={{ margin: 0 }}>{drill.title} — {drill.rows.length} record(s), total {inr(total)}</h2>
+        <h2 style={{ margin: 0 }}>{drill.title} — {drill.rows.length} record(s), total {inr(total)}{totalLabel}</h2>
         <div className="report-actions no-print">
           <button className="btn secondary small" type="button" onClick={doExcel}>⬇ Export Excel</button>
           <button className="btn secondary small" type="button" onClick={doPrint}>⎙ Export PDF</button>
@@ -1813,7 +1818,7 @@ function Dashboard({ settings, collections, referrals, expenses, doctorPays, cas
     if (kind === "mode") { rows = rows.filter((c) => (c.mode || "Other") === mode); title = `${mode} Collections — ${label}`; }
     else if (kind === "outstanding") { rows = rows.filter((c) => Number(c.balance || 0) > 0); title = `Outstanding Due — ${label}`; }
     else if (kind === "doctor") { rows = rows.filter((c) => (c.doctorName || "Unassigned") === doctorName); title = `${doctorName} — ${label}`; }
-    setDrill({ title, kind: "collections", rows });
+    setDrill({ title, kind: kind || "collections", rows });
   };
 
   const netProfit = income ? income.netProfit : null;
