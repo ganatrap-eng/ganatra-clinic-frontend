@@ -55,6 +55,7 @@ const PERMISSION_MODULES = [
   { key: "assets", label: "Fixed Assets" },
   { key: "statements", label: "Financial Statements" },
   { key: "auditLog", label: "User Access Report" },
+  { key: "bankRecon", label: "Bank Reconciliation" },
 ];
 const LEVELS = ["none", "view", "write", "edit", "delete"];
 const LEVEL_LABELS = { none: "No access", view: "View only", write: "View + Write", edit: "View + Write + Edit", delete: "Full (View/Write/Edit/Delete)" };
@@ -402,6 +403,12 @@ const mapCollection = (r) => ({
   balance: Number(r.balance), mode: r.mode, image: r.image_url, createdAt: r.created_at,
 });
 const mapDoctorPay = (r) => ({ id: r.id, date: d10(r.pay_date), doctorId: r.doctor_id, doctorName: r.doctor_name, amount: Number(r.amount) });
+const mapBankLine = (r) => ({
+  id: r.id, date: d10(r.entry_date), description: r.description || "", amount: Number(r.amount), type: r.txn_type,
+  matchedCollectionId: r.matched_collection_id || null, matchedExpenseId: r.matched_expense_id || null, matchedDoctorPayId: r.matched_doctor_pay_id || null,
+  matchedLabel: r.matched_collection_label || r.matched_expense_label || r.matched_doctor_pay_label || null,
+  matchedAmount: r.matched_collection_amount ?? r.matched_expense_amount ?? r.matched_doctor_pay_amount ?? null,
+});
 const mapReferral = (r) => ({ id: r.id, date: d10(r.referral_date), patientName: r.patient_name, referralType: r.referral_type, referredTo: r.referred_to, amount: Number(r.amount), notes: r.notes });
 const mapGift = (r) => ({ id: r.id, date: d10(r.gift_date), repName: r.rep_name, company: r.company, gift: r.gift_description, doctorId: r.doctor_id, doctorName: r.doctor_name, amount: Number(r.amount) || 0 });
 const mapExpense = (r) => ({ id: r.id, date: d10(r.expense_date), category: r.category, amount: Number(r.amount), narration: r.narration, image: r.image_url, createdAt: r.created_at });
@@ -896,6 +903,7 @@ export default function App() {
   const [loans, setLoans] = useState([]);
   const [patientsMaster, setPatientsMaster] = useState([]);
   const [deposits, setDeposits] = useState([]);
+  const [bankLines, setBankLines] = useState([]);
 
   useEffect(() => { storeGet("clinic:apiOrigin").then((o) => { if (o) setOrigin(o); }); }, []);
 
@@ -910,11 +918,12 @@ export default function App() {
       try { return await call(path); } catch { return []; }
     };
     try {
-      const [s, d, c, col, dp, ref, g, exp, ast, cap, other, pm] = await Promise.all([
+      const [s, d, c, col, dp, ref, g, exp, ast, cap, other, pm, bank] = await Promise.all([
         call("/settings").catch(() => ({})),
         safeCall("/doctors", "doctorPay"), safeCall("/cases", "cases"), safeCall("/collections", "collections"),
         safeCall("/doctor-pays", "doctorPay"), safeCall("/referrals", "referrals"), safeCall("/gifts", "gifts"), safeCall("/expenses", "expenses"),
         safeCall("/assets", "assets"), safeCall("/capital", "statements"), safeCall("/other-balance", "statements"), safeCall("/patient-master", "cases"),
+        safeCall("/bank-recon", "bankRecon"),
       ]);
       setSettings(mapSettings(s || {})); setDoctors((d || []).map(mapDoctor)); setCases((c || []).map(mapCase));
       setCollections((col || []).map(mapCollection)); setDoctorPays((dp || []).map(mapDoctorPay));
@@ -924,6 +933,7 @@ export default function App() {
       setLoans(otherMapped.filter((x) => x.category === "unsecured_loan"));
       setDeposits(otherMapped.filter((x) => x.category === "security_deposit"));
       setPatientsMaster((pm || []).map(mapPatientMaster));
+      setBankLines((bank || []).map(mapBankLine));
     } catch (e) { setLoadError(e.message); }
     setLoading(false);
   }, [call, session]);
@@ -3869,7 +3879,7 @@ function AdminUsers() {
     call("/admin/users").then((rows) => {
       setUsers(rows);
       const d = {};
-      rows.forEach((u) => { d[u.id] = { role: u.role || "Staff", doctorId: u.doctor_id || "", permissions: u.permissions && Object.keys(u.permissions).length ? u.permissions : Object.fromEntries(PERMISSION_MODULES.map((m) => [m.key, { level: "none", export: false }])) }; });
+      rows.forEach((u) => { d[u.id] = { role: u.role || "Staff", doctorId: u.doctor_id || "", permissions: Object.fromEntries(PERMISSION_MODULES.map((m) => [m.key, u.permissions?.[m.key] || { level: "none", export: false }])) }; });
       setDrafts(d);
     }).catch((e) => setErr(e.message)).finally(() => setLoading(false));
   };
