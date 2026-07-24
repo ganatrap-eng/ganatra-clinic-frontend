@@ -108,7 +108,7 @@ async function apiFetch(origin, token, path, { method = "GET", body, isForm = fa
   }
   let res;
   try {
-    res = await fetch(`${origin}/api${path}`, { method, headers, body: payload });
+    res = await fetch(`${origin}/api${path}`, { method, headers, body: payload, cache: "no-store" });
   } catch {
     throw new Error(`Couldn't reach ${origin} — check the URL and that the server is running.`);
   }
@@ -3638,14 +3638,7 @@ function AccessReport({ can }) {
   const [userQuery, setUserQuery] = useState("");
   const [moduleFilter, setModuleFilter] = useState("");
   const [actionFilter, setActionFilter] = useState("");
-
-  useEffect(() => { filters.setFrom(monthAgo); filters.setTo(today); }, []); // eslint-disable-line
-
-  const load = () => {
-    setLoading(true); setErr("");
-    call(`/audit-log?from=${filters.from}&to=${filters.to}`).then(setRows).catch((e) => setErr(e.message)).finally(() => setLoading(false));
-  };
-  useEffect(load, [call]); // eslint-disable-line
+  const ROW_CAP = 500;
 
   // A few audit-log entries come from actions that aren't gated by the
   // permission matrix (logging in, admin approvals, clinic settings) — give
@@ -3654,21 +3647,55 @@ function AccessReport({ can }) {
   const moduleLabel = (m) => PERMISSION_MODULES.find((x) => x.key === m)?.label || AUDIT_ONLY_LABELS[m] || m;
   const stamp = (r) => new Date(r.created_at).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" });
 
-  const actionOptions = [...new Set(rows.map((r) => r.action).filter(Boolean))].sort();
-  const moduleOptions = [...new Set(rows.map((r) => r.module).filter(Boolean))].sort((a, b) => moduleLabel(a).localeCompare(moduleLabel(b)));
-  const visibleRows = rows.filter((r) =>
-    (!userQuery.trim() || fuzzyText(r.user_label, userQuery)) &&
-    (!moduleFilter || r.module === moduleFilter) &&
-    (!actionFilter || r.action === actionFilter)
-  );
-  const exportRows = visibleRows.map((r) => ({ ...r, date: String(r.created_at).slice(0, 10) }));
-  const clearSearch = () => { setUserQuery(""); setModuleFilter(""); setActionFilter(""); };
+  // Fixed, known lists rather than "whatever happens to be in the rows we
+  // loaded" — the old version derived these from the (possibly incomplete,
+  // capped) result set, so a module/action with no entries in the current
+  // page just silently couldn't be searched for.
+  const moduleOptions = [...PERMISSION_MODULES.map((m) => m.key), ...Object.keys(AUDIT_ONLY_LABELS)].sort((a, b) => moduleLabel(a).localeCompare(moduleLabel(b)));
+  const actionOptions = ["view", "write", "edit", "delete", "login", "register", "password_reset", "other"];
+
+  // Search now happens on the server (WHERE clause, before the row cap is
+  // applied) — this was the actual bug: with the old client-side-only
+  // search, a real match could exist in the date range but never even be
+  // fetched, because it wasn't among the 500 most recent rows. Searching
+  // "found nothing" even when the record genuinely existed.
+  //
+  // load() takes explicit overrides rather than always reading state,
+  // specifically so the initial mount load can pass the default date range
+  // directly — reading filters.from/filters.to there would race against
+  // the setFrom/setTo calls below (state updates don't apply until the
+  // next render), silently searching all-time instead of last-30-days on
+  // first load.
+  const load = (overrides = {}) => {
+    setLoading(true); setErr("");
+    const from = overrides.from ?? filters.from;
+    const to = overrides.to ?? filters.to;
+    const user = overrides.user ?? userQuery;
+    const module = overrides.module ?? moduleFilter;
+    const action = overrides.action ?? actionFilter;
+    const params = new URLSearchParams({ from, to });
+    if (user.trim()) params.set("user", user.trim());
+    if (module) params.set("module", module);
+    if (action) params.set("action", action);
+    call(`/audit-log?${params.toString()}`).then(setRows).catch((e) => setErr(e.message)).finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    filters.setFrom(monthAgo); filters.setTo(today);
+    load({ from: monthAgo, to: today });
+  }, [call]); // eslint-disable-line
+
+  const onModuleChange = (v) => { setModuleFilter(v); load({ module: v }); };
+  const onActionChange = (v) => { setActionFilter(v); load({ action: v }); };
+  const clearSearch = () => { setUserQuery(""); setModuleFilter(""); setActionFilter(""); load({ user: "", module: "", action: "" }); };
+  const exportRows = rows.map((r) => ({ ...r, date: String(r.created_at).slice(0, 10) }));
+  const hitCap = rows.length >= ROW_CAP;
 
   return (
     <div>
       <div className="card">
         <div className="register-toolbar">
-          <h2 style={{ margin: 0 }}>User Access Report ({visibleRows.length} of {rows.length})</h2>
+          <h2 style={{ margin: 0 }}>User Access Report ({rows.length}{hitCap ? "+" : ""})</h2>
           <CustomExport rows={exportRows} filters={filters} dateField="date" filenameBase="user-access-report" printTitle="User Access Report" canExport={can("auditLog", "export")} buildSheets={(data) => ({ AccessLog: data.map((r) => ({ DateTime: stamp(r), User: r.user_label, Module: moduleLabel(r.module), Action: r.action })) })} printColumns={[{ label: "Date & Time", value: (r) => stamp(r) }, { label: "User", value: (r) => r.user_label }, { label: "Module", value: (r) => moduleLabel(r.module) }, { label: "Action", value: (r) => r.action }]} />
         </div>
         <p style={{ fontSize: 12.5, color: "var(--ink-soft)", marginTop: -8 }}>Who accessed which module, and when — logged automatically as staff use the app.</p>
@@ -3676,28 +3703,32 @@ function AccessReport({ can }) {
           <div><label>From</label><input type="date" value={filters.from} onChange={(e) => filters.setFrom(e.target.value)} /></div>
           <div><label>To</label><input type="date" value={filters.to} onChange={(e) => filters.setTo(e.target.value)} /></div>
         </div>
-        <button className="btn" type="button" onClick={load}>Apply range</button>
+        <button className="btn" type="button" onClick={() => load()}>Apply range</button>
         <div className="form-grid" style={{ maxWidth: 560, marginTop: 14 }}>
-          <div><label>Search User</label><input type="text" placeholder="Name contains…" value={userQuery} onChange={(e) => setUserQuery(e.target.value)} /></div>
+          <div><label>Search User</label><input type="text" placeholder="Name contains…" value={userQuery} onChange={(e) => setUserQuery(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") load(); }} /></div>
           <div><label>Search Module</label>
-            <select value={moduleFilter} onChange={(e) => setModuleFilter(e.target.value)}>
+            <select value={moduleFilter} onChange={(e) => onModuleChange(e.target.value)}>
               <option value="">All modules</option>
               {moduleOptions.map((m) => <option key={m} value={m}>{moduleLabel(m)}</option>)}
             </select>
           </div>
           <div><label>Search Action</label>
-            <select value={actionFilter} onChange={(e) => setActionFilter(e.target.value)}>
+            <select value={actionFilter} onChange={(e) => onActionChange(e.target.value)}>
               <option value="">All actions</option>
               {actionOptions.map((a) => <option key={a} value={a}>{a}</option>)}
             </select>
           </div>
         </div>
-        {(userQuery.trim() || moduleFilter || actionFilter) && <button className="btn secondary small" type="button" style={{ marginTop: 8 }} onClick={clearSearch}>✕ Clear search</button>}
+        <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+          <button className="btn secondary small" type="button" onClick={() => load()}>🔍 Search</button>
+          {(userQuery.trim() || moduleFilter || actionFilter) && <button className="btn secondary small" type="button" onClick={clearSearch}>✕ Clear search</button>}
+        </div>
+        {hitCap && <div className="note-box" style={{ marginTop: 10 }}>Showing the most recent {ROW_CAP} matching entries. If you're looking for something older, narrow the date range or add a Search term to find it directly — search runs against the full range, not just what's shown here.</div>}
         <ErrorNote msg={err} />
-        {loading ? <div className="empty">Loading…</div> : visibleRows.length === 0 ? <div className="empty">No access recorded matching this search.</div> : (
+        {loading ? <div className="empty">Loading…</div> : rows.length === 0 ? <div className="empty">No access recorded matching this search.</div> : (
           <table>
             <thead><tr><th>Date &amp; Time</th><th>User</th><th>Module</th><th>Action</th></tr></thead>
-            <tbody>{visibleRows.map((r) => (<tr key={r.id}><td>{stamp(r)}</td><td>{r.user_label}</td><td>{moduleLabel(r.module)}</td><td style={{ textTransform: "capitalize" }}>{r.action}</td></tr>))}</tbody>
+            <tbody>{rows.map((r) => (<tr key={r.id}><td>{stamp(r)}</td><td>{r.user_label}</td><td>{moduleLabel(r.module)}</td><td style={{ textTransform: "capitalize" }}>{r.action}</td></tr>))}</tbody>
           </table>
         )}
       </div>
