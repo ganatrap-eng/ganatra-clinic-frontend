@@ -1911,6 +1911,25 @@ function Dashboard({ settings, collections, referrals, expenses, doctorPays, cas
   const distP1Amount = distNetProfit !== null ? distNetProfit * (Number(settings.partner1Share) / 100) : null;
   const distP2Amount = distNetProfit !== null ? distNetProfit * (Number(settings.partner2Share) / 100) : null;
 
+  // FY Profit Distribution — mirrors the monthly card above but for a whole
+  // financial year, with its own independent FY picker (defaults to the
+  // globally-selected FY, but can be changed without disturbing the rest
+  // of the dashboard). Same principle as the monthly card: fetches from
+  // /statements/income (the real, formal Income Statement calculation,
+  // depreciation included) rather than any operational shortcut figure.
+  const [distFY, setDistFY] = useState(fy);
+  const [distFYIncome, setDistFYIncome] = useState(null);
+  const [distFYLoading, setDistFYLoading] = useState(true);
+  const [distFYErr, setDistFYErr] = useState("");
+  useEffect(() => {
+    if (!can("statements", "view")) return;
+    setDistFYLoading(true); setDistFYErr("");
+    call(`/statements/income?fy=${distFY}`).then(setDistFYIncome).catch((e) => setDistFYErr(e.message)).finally(() => setDistFYLoading(false));
+  }, [call, distFY]); // eslint-disable-line
+  const distFYNetProfit = distFYIncome ? distFYIncome.netProfit : null;
+  const distFYP1Amount = distFYNetProfit !== null ? distFYNetProfit * (Number(settings.partner1Share) / 100) : null;
+  const distFYP2Amount = distFYNetProfit !== null ? distFYNetProfit * (Number(settings.partner2Share) / 100) : null;
+
   // Month snapshot card — its own month/year filter, independent of "today".
   const [snapMonth, setSnapMonth] = useState(t.slice(0, 7)); // "YYYY-MM"
   const isCurrentSnapMonth = snapMonth === t.slice(0, 7);
@@ -2138,6 +2157,37 @@ function Dashboard({ settings, collections, referrals, expenses, doctorPays, cas
               </table>
               {distNetProfit < 0 && <p style={{ fontSize: 12, color: "var(--expense)", marginTop: 8 }}>This month ran at a loss — each partner's share above is a negative figure (their portion of the shortfall), not a payout.</p>}
               <p style={{ fontSize: 11.5, color: "var(--ink-soft)", marginTop: 10 }}>Partner names and shares are set under Settings → Profit distribution. For the full breakdown behind this figure (income, category-wise expenses, depreciation), see Financial Statements.</p>
+            </>
+          )}
+        </div>
+      )}
+
+      {can("statements", "view") && (
+        <div className="card" style={{ borderLeft: "4px solid var(--accent)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10, marginBottom: 4 }}>
+            <h2 style={{ margin: 0 }}>🤝 Partner Profit Distribution — Financial Year</h2>
+            <div className="no-print" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <select className="fy-select" value={distFY} onChange={(e) => setDistFY(e.target.value)}>{last4FYs().map((f) => <option key={f} value={f}>FY {f}</option>)}</select>
+            </div>
+          </div>
+          <p style={{ fontSize: 12, color: "var(--ink-soft)", marginTop: 0, marginBottom: 14 }}>
+            Split from the actual Financial Statement net profit for FY {distFY} (includes depreciation) — same source as the monthly card above, just for the whole year. Not the same figure as the simplified "Net Profit" shown in the snapshot cards.
+          </p>
+          {distFYLoading ? <div className="empty">Loading…</div> : distFYErr ? <ErrorNote msg={distFYErr} /> : distFYIncome && (
+            <>
+              <table>
+                <thead><tr><th>Partner</th><th className="num">Share</th><th className="num">Amount</th></tr></thead>
+                <tbody>
+                  <tr><td>{settings.partner1Name}</td><td className="num">{settings.partner1Share}%</td><td className="num" style={{ color: distFYP1Amount >= 0 ? "var(--income)" : "var(--expense)" }}>{inr(distFYP1Amount)}</td></tr>
+                  <tr><td>{settings.partner2Name}</td><td className="num">{settings.partner2Share}%</td><td className="num" style={{ color: distFYP2Amount >= 0 ? "var(--income)" : "var(--expense)" }}>{inr(distFYP2Amount)}</td></tr>
+                </tbody>
+                <tfoot><tr style={{ fontWeight: 700, borderTop: "2px solid var(--accent)" }}>
+                  <td colSpan={2}>{distFYNetProfit >= 0 ? "Total Net Profit" : "Total Net Loss"} (FY {distFY})</td>
+                  <td className="num" style={{ color: distFYNetProfit >= 0 ? "var(--income)" : "var(--expense)" }}>{inr(distFYNetProfit)}</td>
+                </tr></tfoot>
+              </table>
+              {distFYNetProfit < 0 && <p style={{ fontSize: 12, color: "var(--expense)", marginTop: 8 }}>This financial year ran at a loss — each partner's share above is a negative figure (their portion of the shortfall), not a payout.</p>}
+              <p style={{ fontSize: 11.5, color: "var(--ink-soft)", marginTop: 10 }}>Partner names and shares are set under Settings → Profit distribution.</p>
             </>
           )}
         </div>
