@@ -414,7 +414,7 @@ const mapGift = (r) => ({ id: r.id, date: d10(r.gift_date), repName: r.rep_name,
 const mapExpense = (r) => ({ id: r.id, date: d10(r.expense_date), category: r.category, amount: Number(r.amount), narration: r.narration, image: r.image_url, createdAt: r.created_at });
 const mapAsset = (r) => ({ id: r.id, name: r.name, block: r.block, rate: Number(r.rate), purchaseDate: d10(r.purchase_date), cost: Number(r.cost) });
 const mapCapital = (r) => ({ id: r.id, date: d10(r.txn_date), type: r.txn_type, amount: Number(r.amount), note: r.note });
-const mapSettings = (r) => ({ clinicName: r.clinic_name || "Your Clinic", proprietor: r.proprietor || "", address: r.address || "", phone: r.phone || "", email: r.email || "", timings: r.timings || "" });
+const mapSettings = (r) => ({ clinicName: r.clinic_name || "Your Clinic", proprietor: r.proprietor || "", address: r.address || "", phone: r.phone || "", email: r.email || "", timings: r.timings || "", partner1Name: r.partner1_name || "Partner 1", partner1Share: Number(r.partner1_share ?? 50), partner2Name: r.partner2_name || "Partner 2", partner2Share: Number(r.partner2_share ?? 50) });
 
 /* -------- Image capture: upload, rotate to align, attach via API -------- */
 /** Displays a user's avatar — fetched the same authenticated way as every
@@ -890,7 +890,7 @@ export default function App() {
   const clearPendingSearch = useCallback(() => setPendingSearch(null), []);
   const [fy, setFy] = useState(fyOf(todayISO()));
 
-  const [settings, setSettings] = useState({ clinicName: "Your Clinic", proprietor: "", address: "", phone: "", email: "", timings: "" });
+  const [settings, setSettings] = useState({ clinicName: "Your Clinic", proprietor: "", address: "", phone: "", email: "", timings: "", partner1Name: "Partner 1", partner1Share: 50, partner2Name: "Partner 2", partner2Share: 50 });
   const [doctors, setDoctors] = useState([]);
   const [cases, setCases] = useState([]);
   const [collections, setCollections] = useState([]);
@@ -1259,7 +1259,7 @@ export default function App() {
             ) : (
               <>
                 {view === "launcher" && <LauncherGrid settings={settings} session={session} can={can} setView={setView} setPendingSearch={setPendingSearch} cases={cases} collections={collections} expenses={expenses} doctorPays={doctorPays} referrals={referrals} gifts={gifts} doctors={doctors} patientsMaster={patientsMaster} />}
-                {view === "dashboard" && <Dashboard settings={settings} collections={collections} referrals={referrals} expenses={expenses} doctorPays={doctorPays} cases={cases} fy={fy} setView={setView} session={session} />}
+                {view === "dashboard" && <Dashboard settings={settings} collections={collections} referrals={referrals} expenses={expenses} doctorPays={doctorPays} cases={cases} fy={fy} setView={setView} session={session} can={can} />}
                 {view === "cases" && can("cases", "view") && <CaseRecords cases={cases} addCase={addCase} updateCase={updateCase} removeCase={removeCase} doctors={doctors} patientsMaster={patientsMaster} pendingSearch={view === "cases" ? pendingSearch : null} clearPendingSearch={clearPendingSearch} can={can} settings={settings} />}
                 {view === "patientMaster" && can("cases", "view") && <PatientMaster can={can} patients={patientsMaster} addPatient={addPatientMaster} updatePatient={updatePatientMaster} removePatient={removePatientMaster} pendingSearch={view === "patientMaster" ? pendingSearch : null} clearPendingSearch={clearPendingSearch} />}
                 {view === "patients" && can("cases", "view") && <PatientHistory can={can} updateCase={updateCase} updateCollection={updateCollection} cases={cases} doctors={doctors} settings={settings} />}
@@ -1872,7 +1872,7 @@ function LauncherGrid({ settings, session, can, setView, setPendingSearch, cases
   );
 }
 
-function Dashboard({ settings, collections, referrals, expenses, doctorPays, cases, fy, setView, session }) {
+function Dashboard({ settings, collections, referrals, expenses, doctorPays, cases, fy, setView, session, can }) {
   const { call } = useApi();
   const [income, setIncome] = useState(null);
   useEffect(() => { call(`/statements/income?fy=${fy}`).then(setIncome).catch(() => setIncome(null)); }, [call, fy]);
@@ -1882,6 +1882,34 @@ function Dashboard({ settings, collections, referrals, expenses, doctorPays, cas
   const yest = (() => { const d = new Date(); d.setDate(d.getDate() - 1); return localISO(d); })();
   const twoDaysAgo = (() => { const d = new Date(); d.setDate(d.getDate() - 2); return localISO(d); })();
   const range = fyRange(fy);
+
+  // Partner Profit Distribution — its own month/year picker (mirrors the
+  // Month snapshot card's pattern below, but is intentionally independent
+  // state, since someone may want to check a different month's payout than
+  // whatever the snapshot card is currently showing). Deliberately fetches
+  // from /statements/income — the exact same endpoint and calculation the
+  // formal Income Statement uses (depreciation included) — rather than
+  // reusing periodSummary()'s netProfit, which explicitly excludes
+  // depreciation and is documented as "a quick operational view, not the
+  // full Income Statement." Distributing that simplified figure between
+  // real partners would systematically overstate every payout.
+  const [distMonth, setDistMonth] = useState(t.slice(0, 7)); // "YYYY-MM"
+  const isCurrentDistMonth = distMonth === t.slice(0, 7);
+  const daysInDistMonth = new Date(Number(distMonth.slice(0, 4)), Number(distMonth.slice(5, 7)), 0).getDate();
+  const distMonthStart = `${distMonth}-01`;
+  const distMonthEnd = isCurrentDistMonth ? t : `${distMonth}-${String(daysInDistMonth).padStart(2, "0")}`;
+  const distMonthLabel = new Date(`${distMonth}-01T00:00:00`).toLocaleDateString("en-IN", { month: "long", year: "numeric" });
+  const [distIncome, setDistIncome] = useState(null);
+  const [distLoading, setDistLoading] = useState(true);
+  const [distErr, setDistErr] = useState("");
+  useEffect(() => {
+    if (!can("statements", "view")) return;
+    setDistLoading(true); setDistErr("");
+    call(`/statements/income?from=${distMonthStart}&to=${distMonthEnd}`).then(setDistIncome).catch((e) => setDistErr(e.message)).finally(() => setDistLoading(false));
+  }, [call, distMonthStart, distMonthEnd]); // eslint-disable-line
+  const distNetProfit = distIncome ? distIncome.netProfit : null;
+  const distP1Amount = distNetProfit !== null ? distNetProfit * (Number(settings.partner1Share) / 100) : null;
+  const distP2Amount = distNetProfit !== null ? distNetProfit * (Number(settings.partner2Share) / 100) : null;
 
   // Month snapshot card — its own month/year filter, independent of "today".
   const [snapMonth, setSnapMonth] = useState(t.slice(0, 7)); // "YYYY-MM"
@@ -2082,6 +2110,38 @@ function Dashboard({ settings, collections, referrals, expenses, doctorPays, cas
         />
         <PeriodCard title={`FY ${fy}`} summary={yearSummary} start={range.start} end={range.end} onDrill={openDrill} />
       </div>
+
+      {can("statements", "view") && (
+        <div className="card" style={{ borderLeft: "4px solid var(--accent)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10, marginBottom: 4 }}>
+            <h2 style={{ margin: 0 }}>🤝 Partner Profit Distribution</h2>
+            <div className="no-print" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--primary-dark)" }}>{distMonthLabel}</span>
+              <input type="month" value={distMonth} onChange={(e) => setDistMonth(e.target.value)} style={{ fontSize: 11.5, padding: "4px 6px", borderRadius: 6, border: "1px solid var(--border)" }} />
+            </div>
+          </div>
+          <p style={{ fontSize: 12, color: "var(--ink-soft)", marginTop: 0, marginBottom: 14 }}>
+            Split from the actual Financial Statement net profit for {distMonthLabel} (includes depreciation) — this is deliberately not the same figure as the simplified "Net Profit" shown in the cards above, which excludes depreciation.
+          </p>
+          {distLoading ? <div className="empty">Loading…</div> : distErr ? <ErrorNote msg={distErr} /> : distIncome && (
+            <>
+              <table>
+                <thead><tr><th>Partner</th><th className="num">Share</th><th className="num">Amount</th></tr></thead>
+                <tbody>
+                  <tr><td>{settings.partner1Name}</td><td className="num">{settings.partner1Share}%</td><td className="num" style={{ color: distP1Amount >= 0 ? "var(--income)" : "var(--expense)" }}>{inr(distP1Amount)}</td></tr>
+                  <tr><td>{settings.partner2Name}</td><td className="num">{settings.partner2Share}%</td><td className="num" style={{ color: distP2Amount >= 0 ? "var(--income)" : "var(--expense)" }}>{inr(distP2Amount)}</td></tr>
+                </tbody>
+                <tfoot><tr style={{ fontWeight: 700, borderTop: "2px solid var(--accent)" }}>
+                  <td colSpan={2}>{distNetProfit >= 0 ? "Total Net Profit" : "Total Net Loss"} ({distMonthLabel})</td>
+                  <td className="num" style={{ color: distNetProfit >= 0 ? "var(--income)" : "var(--expense)" }}>{inr(distNetProfit)}</td>
+                </tr></tfoot>
+              </table>
+              {distNetProfit < 0 && <p style={{ fontSize: 12, color: "var(--expense)", marginTop: 8 }}>This month ran at a loss — each partner's share above is a negative figure (their portion of the shortfall), not a payout.</p>}
+              <p style={{ fontSize: 11.5, color: "var(--ink-soft)", marginTop: 10 }}>Partner names and shares are set under Settings → Profit distribution. For the full breakdown behind this figure (income, category-wise expenses, depreciation), see Financial Statements.</p>
+            </>
+          )}
+        </div>
+      )}
 
       <div className="section-header" style={{ textAlign: "center" }}>Trends</div>
       <div className="card">
@@ -3785,6 +3845,23 @@ function SettingsPage({ settings, updateSettings, session, origin, capital, addC
         <p style={{ fontSize: 12, color: "var(--ink-soft)", marginTop: -8 }}>Email and timings are optional — shown on the printed prescription letterhead if filled in.</p>
         {canEditSettings ? <button className="btn" type="button" disabled={busy} onClick={save}>Save profile</button> : <div className="note-box">Only Admin or Doctor roles can edit the clinic profile.</div>}
         <ErrorNote msg={err} />
+      </div>
+
+      <div className="card">
+        <h2>Profit distribution</h2>
+        <p style={{ fontSize: 12.5, color: "var(--ink-soft)", marginTop: -8 }}>Used by the Dashboard's monthly Profit Distribution summary, split from the actual Financial Statement net profit for the month selected there.</p>
+        <div className="form-grid">
+          <div><label>Partner 1 name</label><input type="text" value={form.partner1Name} onChange={(e) => setForm({ ...form, partner1Name: e.target.value })} disabled={!canEditSettings} /></div>
+          <div><label>Partner 1 share (%)</label><input type="number" step="0.01" value={form.partner1Share} onChange={(e) => setForm({ ...form, partner1Share: e.target.value })} disabled={!canEditSettings} /></div>
+          <div><label>Partner 2 name</label><input type="text" value={form.partner2Name} onChange={(e) => setForm({ ...form, partner2Name: e.target.value })} disabled={!canEditSettings} /></div>
+          <div><label>Partner 2 share (%)</label><input type="number" step="0.01" value={form.partner2Share} onChange={(e) => setForm({ ...form, partner2Share: e.target.value })} disabled={!canEditSettings} /></div>
+        </div>
+        {Math.abs(Number(form.partner1Share || 0) + Number(form.partner2Share || 0) - 100) > 0.01 && (
+          <div className="note-box" style={{ borderColor: "var(--expense)", color: "var(--expense)" }}>
+            Shares currently add up to {(Number(form.partner1Share || 0) + Number(form.partner2Share || 0)).toFixed(2)}% — they must total exactly 100% before this can be saved.
+          </div>
+        )}
+        {canEditSettings ? <button className="btn" type="button" disabled={busy} onClick={save}>Save changes</button> : <div className="note-box">Only Admin or Doctor roles can edit the clinic profile.</div>}
       </div>
 
       <div className="card">
