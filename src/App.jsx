@@ -701,10 +701,10 @@ function AuthScreen({ onLogin, origin, setOrigin }) {
     <div className="auth-wrap">
       <style>{`
         ${FONT_IMPORT}
-        .auth-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(160deg,#EFEBFA 0%,#E4DEF5 40%,#F6F3FC 75%,#FDFBFF 100%);font-family:'Inter',sans-serif;padding:24px;}
+        .auth-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(160deg,#EFEBFA 0%,#E4DEF5 40%,#F6F3FC 75%,#FDFBFF 100%);font-family:'Aptos','Inter',sans-serif;padding:24px;}
         .auth-card{width:100%;max-width:440px;background:#fff;border-radius:18px;overflow:hidden;box-shadow:0 30px 70px rgba(0,0,0,.45);}
         .auth-header{background:linear-gradient(135deg,#714B67,#4A2F44);padding:30px 26px 22px;text-align:center;}
-        .auth-header .brand{font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;color:#fff;font-size:26px;letter-spacing:.5px;margin-top:6px;}
+        .auth-header .brand{font-family:'Aptos','Plus Jakarta Sans',sans-serif;font-weight:800;color:#fff;font-size:26px;letter-spacing:.5px;margin-top:6px;}
         .auth-header .sub{color:#B9D8D2;font-size:12px;letter-spacing:2px;text-transform:uppercase;margin-top:4px;}
         .pulse-path{stroke:#C9A227;stroke-width:2.5;fill:none;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:340;stroke-dashoffset:340;animation:draw 1.4s ease forwards .2s;}
         @keyframes draw{to{stroke-dashoffset:0;}}
@@ -715,18 +715,18 @@ function AuthScreen({ onLogin, origin, setOrigin }) {
         .tab-btn.active{background:#714B67;color:#fff;border-color:#714B67;}
         .field{margin-bottom:14px;}
         .field label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:1px;color:#5B6B69;font-weight:700;margin-bottom:5px;}
-        .field input,.field select{width:100%;border:1.5px solid #E1E8E6;border-radius:8px;padding:10px 11px;font-size:14.5px;font-family:'IBM Plex Mono',monospace;outline:none;box-sizing:border-box;}
+        .field input,.field select{width:100%;border:1.5px solid #E1E8E6;border-radius:8px;padding:10px 11px;font-size:14.5px;font-family:'Aptos Mono','IBM Plex Mono',monospace;outline:none;box-sizing:border-box;}
         .field input:focus,.field select:focus{border-color:#714B67;}
         .field .hint{font-size:10.5px;color:#8a9a97;margin-top:4px;}
         .err{color:#B3423A;font-size:12.5px;margin-bottom:10px;}
         .info{color:#714B67;font-size:12.5px;margin-bottom:10px;background:#EAF3F1;padding:8px 10px;border-radius:6px;}
-        .dev-code{font-family:'IBM Plex Mono',monospace;font-size:22px;letter-spacing:4px;text-align:center;background:#F3E3A8;color:#5b4a06;padding:10px;border-radius:8px;margin-bottom:14px;}
+        .dev-code{font-family:'Aptos Mono','IBM Plex Mono',monospace;font-size:22px;letter-spacing:4px;text-align:center;background:#F3E3A8;color:#5b4a06;padding:10px;border-radius:8px;margin-bottom:14px;}
         .submit-btn{width:100%;background:#714B67;color:#fff;font-weight:700;border:none;padding:12px;border-radius:8px;font-size:14.5px;cursor:pointer;box-shadow:0 4px 0 #4A2F44;}
         .submit-btn:active{transform:translateY(2px);box-shadow:0 2px 0 #96791b;}
         .note{font-size:11px;color:#8a9a97;margin-top:12px;line-height:1.6;text-align:center;}
         .api-field{background:#F5F8F7;border:1px dashed #C9A227;border-radius:8px;padding:10px 12px;margin-bottom:16px;}
         .api-field label{display:block;font-size:10.5px;text-transform:uppercase;letter-spacing:1px;color:#8a6d0a;font-weight:700;margin-bottom:5px;}
-        .api-field input{width:100%;border:1px solid #E1E8E6;border-radius:6px;padding:8px 9px;font-size:13px;font-family:'IBM Plex Mono',monospace;box-sizing:border-box;}
+        .api-field input{width:100%;border:1px solid #E1E8E6;border-radius:6px;padding:8px 9px;font-size:13px;font-family:'Aptos Mono','IBM Plex Mono',monospace;box-sizing:border-box;}
         .back-link{display:block;text-align:center;margin-top:10px;font-size:12px;color:#5B6B69;background:none;border:none;cursor:pointer;text-decoration:underline;}
       `}</style>
       <div className="auth-card">
@@ -1004,9 +1004,9 @@ export default function App() {
           ${FONT_IMPORT}
           .app-root{--primary:#714B67;--primary-dark:#4A2F44;--accent:#C9A227;--accent-soft:#F3E3A8;--bg:#F5F8F7;--surface:#FFFFFF;
             --ink:#142524;--ink-soft:#5B6B69;--border:#E1E8E6;--income:#1F8A5F;--expense:#B3423A;
-            min-height:100vh;background:var(--bg);font-family:'Inter',sans-serif;color:var(--ink);display:flex;}
+            min-height:100vh;background:var(--bg);font-family:'Aptos','Inter',sans-serif;color:var(--ink);display:flex;}
           .sidebar{width:230px;background:linear-gradient(180deg,var(--primary),var(--primary-dark));color:#EAF3F1;flex-shrink:0;padding:22px 0;display:flex;flex-direction:column;}
-          .sidebar .brand{font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;font-size:20px;padding:0 20px 2px;}
+          .sidebar .brand{font-family:'Aptos','Plus Jakarta Sans',sans-serif;font-weight:800;font-size:20px;padding:0 20px 2px;}
           .sidebar .biz{padding:0 20px 16px;font-size:11.5px;color:#B9D8D2;border-bottom:1px solid rgba(255,255,255,.15);margin-bottom:8px;line-height:1.5;word-break:break-all;}
           .nav-item{text-align:left;background:none;border:none;color:#EAF3F1;padding:10px 20px;font-size:13.5px;font-weight:500;cursor:pointer;border-left:3px solid transparent;opacity:.82;display:flex;align-items:center;gap:10px;}
           .nav-icon{font-size:15px;line-height:1;width:18px;text-align:center;flex-shrink:0;}
@@ -1029,11 +1029,11 @@ export default function App() {
           .user-chip-text{display:flex;flex-direction:column;line-height:1.2;text-align:left;}
           .user-chip-name{font-size:12.5px;font-weight:700;color:var(--ink);}
           .user-chip-role{font-size:10.5px;color:var(--ink-soft);}
-          .topbar h1{font-family:'Plus Jakarta Sans',sans-serif;font-size:19px;margin:0;}
-          .fy-select{font-family:'IBM Plex Mono',monospace;background:#fff;border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:13px;}
+          .topbar h1{font-family:'Aptos','Plus Jakarta Sans',sans-serif;font-size:19px;margin:0;}
+          .fy-select{font-family:'Aptos Mono','IBM Plex Mono',monospace;background:#fff;border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:13px;}
           .content{padding:22px 26px 60px;max-width:1150px;}
           .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px 20px;margin-bottom:18px;box-shadow:0 1px 4px rgba(10,40,36,.05);}
-          .card h2{font-family:'Plus Jakarta Sans',sans-serif;font-size:16.5px;margin:0 0 12px;color:var(--primary-dark);}
+          .card h2{font-family:'Aptos','Plus Jakarta Sans',sans-serif;font-size:16.5px;margin:0 0 12px;color:var(--primary-dark);}
           .grid-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:20px;}
           .launcher-wrap{background:linear-gradient(160deg,#EFEBFA 0%,#F6F3FC 45%,#FDFBFF 100%);border-radius:16px;padding:36px 28px;min-height:calc(100vh - 100px);}
           .launcher-header{margin-bottom:0;}
@@ -1055,7 +1055,7 @@ export default function App() {
           .dot-green{background:#1F8A5F;}
           .dot-red{background:#B3423A;}
           .upload-calendar-month{margin-left:auto;font-weight:700;color:var(--ink);}
-          .launcher-header h2{font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;font-size:26px;color:var(--primary-dark);margin:0 0 6px;}
+          .launcher-header h2{font-family:'Aptos','Plus Jakarta Sans',sans-serif;font-weight:800;font-size:26px;color:var(--primary-dark);margin:0 0 6px;}
           .launcher-header p{color:var(--ink-soft);font-size:14px;margin:0;}
           .launcher-grid{display:flex;flex-wrap:nowrap;overflow-x:auto;gap:16px;padding-bottom:8px;scrollbar-width:thin;}
           .launcher-grid::-webkit-scrollbar{height:6px;}
@@ -1132,8 +1132,8 @@ export default function App() {
           .kpi-icon{font-size:20px;line-height:1;}
           .kpi-label{font-size:10.5px;text-transform:uppercase;letter-spacing:.8px;color:var(--ink-soft);font-weight:700;}
           .kpi-bottom{display:flex;align-items:center;justify-content:space-between;gap:10px;}
-          .kpi-value{font-family:'IBM Plex Mono',monospace;font-size:22px;font-weight:700;white-space:nowrap;}
-          .section-header{font-family:'Plus Jakarta Sans',sans-serif;font-size:13px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:var(--primary-dark);margin:26px 0 12px;padding-bottom:6px;border-bottom:2px solid var(--accent-soft);}
+          .kpi-value{font-family:'Aptos Mono','IBM Plex Mono',monospace;font-size:22px;font-weight:700;white-space:nowrap;}
+          .section-header{font-family:'Aptos','Plus Jakarta Sans',sans-serif;font-size:13px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:var(--primary-dark);margin:26px 0 12px;padding-bottom:6px;border-bottom:2px solid var(--accent-soft);}
           .section-header:first-child{margin-top:0;}
           .insight-banner{background:linear-gradient(135deg,var(--primary),var(--primary-dark));color:#EAF3F1;border-radius:12px;padding:16px 20px;margin-bottom:20px;font-size:14px;line-height:1.6;display:flex;align-items:center;gap:12px;}
           .insight-banner .insight-icon{font-size:22px;}
@@ -1144,10 +1144,10 @@ export default function App() {
           .period-card td{padding:5px 4px;}
           .stat{background:var(--surface);border:1px solid var(--border);border-left:4px solid var(--accent);border-radius:10px;padding:14px 16px;}
           .stat .label{font-size:10.5px;text-transform:uppercase;letter-spacing:.8px;color:var(--ink-soft);font-weight:700;}
-          .stat .value{font-family:'IBM Plex Mono',monospace;font-size:20px;font-weight:600;margin-top:5px;}
+          .stat .value{font-family:'Aptos Mono','IBM Plex Mono',monospace;font-size:20px;font-weight:600;margin-top:5px;}
           table{width:100%;border-collapse:collapse;font-size:13px;}
           th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.4px;color:var(--ink-soft);border-bottom:2px solid var(--accent);padding:6px 8px;}
-          td{padding:7px 8px;border-bottom:1px solid var(--border);font-family:'IBM Plex Mono',monospace;vertical-align:top;}
+          td{padding:7px 8px;border-bottom:1px solid var(--border);font-family:'Aptos Mono','IBM Plex Mono',monospace;vertical-align:top;}
           tr:last-child td{border-bottom:none;}
           @keyframes rowHighlightPulse{0%{box-shadow:inset 0 0 0 9999px rgba(201,162,39,.38);}100%{box-shadow:inset 0 0 0 9999px rgba(201,162,39,0);}}
           .row-highlight td{animation:rowHighlightPulse 2.1s ease-out;}
@@ -1158,13 +1158,13 @@ export default function App() {
           .btn.small{padding:5px 10px;font-size:12px;}
           .btn.danger{background:var(--expense);}
           .btn:disabled{opacity:.55;cursor:default;}
-          select,input[type=text],input[type=date],input[type=number],input[type=tel]{font-family:'Inter',sans-serif;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:13.5px;}
+          select,input[type=text],input[type=date],input[type=number],input[type=tel]{font-family:'Aptos','Inter',sans-serif;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:13.5px;}
           .form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:12px;}
           .form-grid label{display:block;font-size:10.5px;font-weight:700;color:var(--ink-soft);margin-bottom:4px;text-transform:uppercase;letter-spacing:.4px;}
           .empty{color:var(--ink-soft);font-size:13px;padding:10px 0;}
           .pill{display:inline-block;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:700;}
           .pill.morning{background:#FFF2CE;color:#8a6d0a;} .pill.evening{background:#E4DCF7;color:#5b3fa3;}
-          .balance-tag{font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:600;padding:4px 10px;border-radius:6px;display:inline-block;}
+          .balance-tag{font-family:'Aptos Mono','IBM Plex Mono',monospace;font-size:13px;font-weight:600;padding:4px 10px;border-radius:6px;display:inline-block;}
           .balance-tag.ok{background:#e3efe6;color:var(--income);} .balance-tag.bad{background:#f6e4e4;color:var(--expense);}
           .export-row{display:flex;gap:8px;margin-top:12px;}
           .report-actions{display:flex;gap:8px;flex-wrap:wrap;flex-shrink:0;}
@@ -1223,9 +1223,11 @@ export default function App() {
           .custom-export-panel label{display:block;font-size:10px;text-transform:uppercase;color:var(--ink-soft);font-weight:700;margin-bottom:3px;}
           .print-root{display:none;}
           @media print{
+            .app-root{min-height:0 !important;display:block !important;}
             .sidebar,.nav-backdrop,.topbar .fy-select,.no-print{display:none !important;} .content{padding:0;max-width:100%;} body{background:#fff;} .card{box-shadow:none;border:1px solid #ccc;}
             body.printing-custom .content > *{display:none !important;}
             body.printing-custom .print-root{display:block !important;}
+            @page{margin:14mm;}
           }
         `}</style>
 
@@ -2322,7 +2324,7 @@ function CaseRecords({ cases, addCase, updateCase, removeCase, doctors, patients
     const infoRow = (label, value) => value ? `<div><span style="color:#8A8478;">${escapeHtml(label)}</span> <strong>${escapeHtml(value)}</strong></div>` : "";
 
     win.innerHTML = `
-      <div style="font-family:'Georgia',serif;max-width:720px;margin:0 auto;color:#222;">
+      <div style="font-family:'Aptos Serif','Georgia',serif;max-width:720px;margin:0 auto;color:#222;">
         <div style="border:1.5px solid #333;border-radius:6px;padding:16px 20px;margin-bottom:18px;">
           <div style="display:flex;justify-content:space-between;align-items:flex-start;">
             <h2 style="margin:0;font-size:22px;letter-spacing:.3px;">${escapeHtml(settings?.clinicName || "Your Clinic")}</h2>
@@ -2333,7 +2335,7 @@ function CaseRecords({ cases, addCase, updateCase, removeCase, doctors, patients
             ${doctor?.registrationNo ? `<span style="font-size:11.5px;color:#333;">Reg. No.: ${escapeHtml(doctor.registrationNo)}</span>` : ""}
             ${doctor?.specialization ? `<span style="font-size:12px;font-weight:600;">${escapeHtml(doctor.specialization)}</span>` : ""}
           </div>
-          <p style="margin:6px 0 0;color:#5B6B69;font-size:11px;border-top:1px solid #ddd;padding-top:6px;">${[settings?.address, settings?.email, settings?.timings].filter(Boolean).map(escapeHtml).join(" &nbsp;·&nbsp; ")}</p>
+          <p style="margin:8px 0 0;color:#5B6B69;font-size:11px;border-top:1px solid #ddd;padding-top:8px;letter-spacing:.2px;">${[settings?.address, settings?.email, settings?.timings].filter(Boolean).map(escapeHtml).join(" &nbsp;·&nbsp; ")}</p>
         </div>
 
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 24px;background:#FAF8F3;border:1px solid #E5DFC8;border-radius:6px;padding:12px 16px;margin-bottom:16px;font-size:13px;">
@@ -2368,7 +2370,7 @@ function CaseRecords({ cases, addCase, updateCase, removeCase, doctors, patients
             </tr>`).join("")}</tbody>
           </table>` : ""}
         ${data.externalPrescription ? `<p style="font-size:12.5px;margin-top:14px;"><strong>Also buy from medical store:</strong> ${escapeHtml(data.externalPrescription)}</p>` : ""}
-        <p style="margin-top:70px;font-size:12.5px;text-align:right;">Signature: ______________________</p>
+        <p style="margin-top:50px;font-size:12.5px;text-align:right;">Signature: ______________________</p>
       </div>
     `;
     document.body.classList.add("printing-custom");
@@ -2813,7 +2815,7 @@ function PatientHistory({ can, updateCase, updateCollection, cases, doctors, set
     const infoRow = (label, value) => value ? `<div><span style="color:#8A8478;">${escapeHtml(label)}</span> <strong>${escapeHtml(value)}</strong></div>` : "";
 
     win.innerHTML = `
-      <div style="font-family:'Georgia',serif;max-width:720px;margin:0 auto;color:#222;">
+      <div style="font-family:'Aptos Serif','Georgia',serif;max-width:720px;margin:0 auto;color:#222;">
         <div style="border:1.5px solid #333;border-radius:6px;padding:16px 20px;margin-bottom:18px;">
           <div style="display:flex;justify-content:space-between;align-items:flex-start;">
             <h2 style="margin:0;font-size:22px;letter-spacing:.3px;">${escapeHtml(settings?.clinicName || "Your Clinic")}</h2>
@@ -2824,7 +2826,7 @@ function PatientHistory({ can, updateCase, updateCollection, cases, doctors, set
             ${doctor?.registrationNo ? `<span style="font-size:11.5px;color:#333;">Reg. No.: ${escapeHtml(doctor.registrationNo)}</span>` : ""}
             ${doctor?.specialization ? `<span style="font-size:12px;font-weight:600;">${escapeHtml(doctor.specialization)}</span>` : ""}
           </div>
-          <p style="margin:6px 0 0;color:#5B6B69;font-size:11px;border-top:1px solid #ddd;padding-top:6px;">${[settings?.address, settings?.email, settings?.timings].filter(Boolean).map(escapeHtml).join(" &nbsp;·&nbsp; ")}</p>
+          <p style="margin:8px 0 0;color:#5B6B69;font-size:11px;border-top:1px solid #ddd;padding-top:8px;letter-spacing:.2px;">${[settings?.address, settings?.email, settings?.timings].filter(Boolean).map(escapeHtml).join(" &nbsp;·&nbsp; ")}</p>
         </div>
 
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 24px;background:#FAF8F3;border:1px solid #E5DFC8;border-radius:6px;padding:12px 16px;margin-bottom:16px;font-size:13px;">
@@ -2859,7 +2861,7 @@ function PatientHistory({ can, updateCase, updateCollection, cases, doctors, set
             </tr>`).join("")}</tbody>
           </table>` : ""}
         ${c.external_prescription ? `<p style="font-size:12.5px;margin-top:14px;"><strong>Also buy from medical store:</strong> ${escapeHtml(c.external_prescription)}</p>` : ""}
-        <p style="margin-top:70px;font-size:12.5px;text-align:right;">Signature: ______________________</p>
+        <p style="margin-top:50px;font-size:12.5px;text-align:right;">Signature: ______________________</p>
       </div>
     `;
     document.body.classList.add("printing-custom");
