@@ -386,6 +386,19 @@ function CustomExport({ rows, allRows, filters, dateField, buildSheets, filename
 }
 function PrintRoot() { return <div id="print-root" className="print-root"></div>; }
 
+/** Shows /logo.png (a per-deployment static asset — see public/logo.png) if
+ *  it loads successfully, otherwise falls back to plain text. This keeps a
+ *  clinic's real logo working without hardcoding a dependency on it always
+ *  existing — a fresh deployment for a different clinic with no logo.png
+ *  yet just shows the text brand instead of a broken image. */
+function BrandLogo({ fallbackText, className, imgClassName, style, onClick, title }) {
+  const [imgOk, setImgOk] = useState(true);
+  if (imgOk) {
+    return <img src="/logo.png" alt={fallbackText} className={imgClassName} style={style} onClick={onClick} title={title} onError={() => setImgOk(false)} />;
+  }
+  return <div className={className} style={style} onClick={onClick} title={title}>{fallbackText}</div>;
+}
+
 /* -------- row → app-shape mappers (backend is snake_case) -------- */
 const mapDoctor = (r) => ({ id: r.id, name: r.name, shift: r.shift, payType: r.pay_type, rate: Number(r.rate), registrationNo: r.registration_no || "", qualifications: r.qualifications || "", specialization: r.specialization || "" });
 const mapCase = (r) => ({
@@ -705,6 +718,7 @@ function AuthScreen({ onLogin, origin, setOrigin }) {
         .auth-card{width:100%;max-width:440px;background:#fff;border-radius:18px;overflow:hidden;box-shadow:0 30px 70px rgba(0,0,0,.45);}
         .auth-header{background:linear-gradient(135deg,#714B67,#4A2F44);padding:30px 26px 22px;text-align:center;}
         .auth-header .brand{font-family:'Aptos','Plus Jakarta Sans',sans-serif;font-weight:800;color:#fff;font-size:26px;letter-spacing:.5px;margin-top:6px;}
+        .auth-header .brand-logo-img{max-width:210px;max-height:80px;width:auto;height:auto;margin-top:6px;}
         .auth-header .sub{color:#B9D8D2;font-size:12px;letter-spacing:2px;text-transform:uppercase;margin-top:4px;}
         .pulse-path{stroke:#C9A227;stroke-width:2.5;fill:none;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:340;stroke-dashoffset:340;animation:draw 1.4s ease forwards .2s;}
         @keyframes draw{to{stroke-dashoffset:0;}}
@@ -734,7 +748,7 @@ function AuthScreen({ onLogin, origin, setOrigin }) {
           <svg viewBox="0 0 200 40" width="180" height="36" style={{ margin: "0 auto", display: "block" }}>
             <path className="pulse-path" d="M0,20 L55,20 L65,4 L75,36 L85,20 L200,20" />
           </svg>
-          <div className="brand">CLINIC ERP</div>
+          <BrandLogo fallbackText="CLINIC ERP" className="brand" imgClassName="brand-logo-img" />
           <div className="sub">Practice &amp; Accounts Manager</div>
         </div>
         <div className="auth-body">
@@ -1007,6 +1021,7 @@ export default function App() {
             min-height:100vh;background:var(--bg);font-family:'Aptos','Inter',sans-serif;color:var(--ink);display:flex;}
           .sidebar{width:230px;background:linear-gradient(180deg,var(--primary),var(--primary-dark));color:#EAF3F1;flex-shrink:0;padding:22px 0;display:flex;flex-direction:column;}
           .sidebar .brand{font-family:'Aptos','Plus Jakarta Sans',sans-serif;font-weight:800;font-size:20px;padding:0 20px 2px;}
+          .sidebar-logo-img{display:block;max-width:170px;max-height:70px;width:auto;height:auto;margin:0 20px 8px;cursor:pointer;}
           .sidebar .biz{padding:0 20px 16px;font-size:11.5px;color:#B9D8D2;border-bottom:1px solid rgba(255,255,255,.15);margin-bottom:8px;line-height:1.5;word-break:break-all;}
           .nav-item{text-align:left;background:none;border:none;color:#EAF3F1;padding:10px 20px;font-size:13.5px;font-weight:500;cursor:pointer;border-left:3px solid transparent;opacity:.82;display:flex;align-items:center;gap:10px;}
           .nav-icon{font-size:15px;line-height:1;width:18px;text-align:center;flex-shrink:0;}
@@ -1234,7 +1249,7 @@ export default function App() {
         <button className="mobile-nav-toggle no-print" onClick={() => setNavOpen((o) => !o)} title="Menu" type="button">☰</button>
         <div className={"nav-backdrop" + (navOpen ? " open" : "")} onClick={() => setNavOpen(false)} />
         <nav className={"sidebar" + (navOpen ? " open" : "")}>
-          <div className="brand" style={{ cursor: "pointer" }} onClick={() => goto("launcher")} title="Back to app launcher">{(settings.clinicName || "Your Clinic").toUpperCase()}</div>
+          <BrandLogo fallbackText={(settings.clinicName || "Your Clinic").toUpperCase()} className="brand" imgClassName="brand-logo-img sidebar-logo-img" style={{ cursor: "pointer" }} onClick={() => goto("launcher")} title="Back to app launcher" />
           <div className="biz" style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <Avatar url={session.avatarUrl} name={session.name} size={38} />
             <span>{settings.proprietor}<br />{session.name} ({session.userId}) · {session.role}<br /><span style={{ opacity: .7 }}>{origin}</span></span>
@@ -2326,8 +2341,11 @@ function CaseRecords({ cases, addCase, updateCase, removeCase, doctors, patients
     win.innerHTML = `
       <div style="font-family:'Aptos Serif','Georgia',serif;max-width:720px;margin:0 auto;color:#222;">
         <div style="border:1.5px solid #333;border-radius:6px;padding:16px 20px;margin-bottom:18px;">
-          <div style="display:flex;justify-content:space-between;align-items:flex-start;">
-            <h2 style="margin:0;font-size:22px;letter-spacing:.3px;">${escapeHtml(settings?.clinicName || "Your Clinic")}</h2>
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:14px;">
+            <div style="display:flex;align-items:center;gap:12px;">
+              <img src="/logo.png" alt="" style="max-height:56px;max-width:120px;width:auto;height:auto;" onerror="this.style.display='none'" />
+              <h2 style="margin:0;font-size:22px;letter-spacing:.3px;">${escapeHtml(settings?.clinicName || "Your Clinic")}</h2>
+            </div>
             ${settings?.phone ? `<span style="font-size:12px;white-space:nowrap;">Mob.: ${escapeHtml(settings.phone)}</span>` : ""}
           </div>
           ${doctor ? `<p style="margin:6px 0 0;font-weight:700;font-size:14px;">${escapeHtml(doctor.name)}${doctor.qualifications ? ` &nbsp;<span style="font-weight:400;font-size:12px;">${escapeHtml(doctor.qualifications)}</span>` : ""}</p>` : ""}
@@ -2817,8 +2835,11 @@ function PatientHistory({ can, updateCase, updateCollection, cases, doctors, set
     win.innerHTML = `
       <div style="font-family:'Aptos Serif','Georgia',serif;max-width:720px;margin:0 auto;color:#222;">
         <div style="border:1.5px solid #333;border-radius:6px;padding:16px 20px;margin-bottom:18px;">
-          <div style="display:flex;justify-content:space-between;align-items:flex-start;">
-            <h2 style="margin:0;font-size:22px;letter-spacing:.3px;">${escapeHtml(settings?.clinicName || "Your Clinic")}</h2>
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:14px;">
+            <div style="display:flex;align-items:center;gap:12px;">
+              <img src="/logo.png" alt="" style="max-height:56px;max-width:120px;width:auto;height:auto;" onerror="this.style.display='none'" />
+              <h2 style="margin:0;font-size:22px;letter-spacing:.3px;">${escapeHtml(settings?.clinicName || "Your Clinic")}</h2>
+            </div>
             ${settings?.phone ? `<span style="font-size:12px;white-space:nowrap;">Mob.: ${escapeHtml(settings.phone)}</span>` : ""}
           </div>
           ${doctor ? `<p style="margin:6px 0 0;font-weight:700;font-size:14px;">${escapeHtml(doctor.name)}${doctor.qualifications ? ` &nbsp;<span style="font-weight:400;font-size:12px;">${escapeHtml(doctor.qualifications)}</span>` : ""}</p>` : ""}
