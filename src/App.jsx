@@ -1970,6 +1970,12 @@ function Dashboard({ settings, collections, referrals, expenses, doctorPays, cas
   const todaySummary = periodSummary(collections, expenses, doctorPays, t, t);
   const yestSummary = periodSummary(collections, expenses, doctorPays, yest, yest);
   const twoDaysAgoSummary = periodSummary(collections, expenses, doctorPays, twoDaysAgo, twoDaysAgo);
+
+  // Pick Any Day — a single-day snapshot for any date the person chooses,
+  // same periodSummary() calculation as Today/Yesterday/2 Days Ago above,
+  // so it's guaranteed to agree with them and with every drill-down.
+  const [pickedDay, setPickedDay] = useState(t);
+  const pickedDaySummary = periodSummary(collections, expenses, doctorPays, pickedDay, pickedDay);
   const weekSummary = periodSummary(collections, expenses, doctorPays, weekStart, weekEnd);
   // Always the true "last 7 days," independent of the Week-of-month dropdown above —
   // used only for the top insight banner and KPI cards, which should never silently
@@ -1982,7 +1988,7 @@ function Dashboard({ settings, collections, referrals, expenses, doctorPays, cas
   const caseById = useMemo(() => Object.fromEntries(cases.map((c) => [c.id, c])), [cases]);
   const enrichCollection = (c) => { const linked = c.caseId ? caseById[c.caseId] : null; return { ...c, shift: linked?.shift || "", doctorName: linked?.doctorName || "" }; };
 
-  const openDrill = ({ kind, mode, doctorName, start, end, label }) => {
+  const openDrill = ({ kind, mode, doctorName, shift, start, end, label }) => {
     const inRange = (d) => (!start || d >= start) && (!end || d <= end);
     if (kind === "expenses") {
       const expenseRows = expenses.filter((e) => inRange(e.date));
@@ -1996,8 +2002,31 @@ function Dashboard({ settings, collections, referrals, expenses, doctorPays, cas
     if (kind === "mode") { rows = rows.filter((c) => (c.mode || "Other") === mode); title = `${mode} Collections — ${label}`; }
     else if (kind === "outstanding") { rows = rows.filter((c) => Number(c.balance || 0) > 0); title = `Outstanding Due — ${label}`; }
     else if (kind === "doctor") { rows = rows.filter((c) => (c.doctorName || "Unassigned") === doctorName); title = `${doctorName} — ${label}`; }
+    else if (kind === "shift") { rows = rows.filter((c) => c.shift === shift); title = `${shift} Collections — ${label}`; }
     setDrill({ title, kind: kind || "collections", rows });
   };
+
+  // Master Monthly Summary — every day of a chosen month, broken into
+  // Morning / Evening (via each collection's linked case, same as
+  // ShiftCollectionChart below) and Total. Every cell opens the same
+  // drill-down/export/print system as everything else on this page.
+  const [masterMonth, setMasterMonth] = useState(t.slice(0, 7)); // "YYYY-MM"
+  const daysInMasterMonth = new Date(Number(masterMonth.slice(0, 4)), Number(masterMonth.slice(5, 7)), 0).getDate();
+  const masterMonthLabel = new Date(`${masterMonth}-01T00:00:00`).toLocaleDateString("en-IN", { month: "long", year: "numeric" });
+  const masterRows = useMemo(() => {
+    const rows = [];
+    for (let day = 1; day <= daysInMasterMonth; day++) {
+      const iso = `${masterMonth}-${String(day).padStart(2, "0")}`;
+      const dayCollections = collections.filter((c) => c.date === iso).map(enrichCollection);
+      const morning = dayCollections.filter((c) => c.shift === "Morning").reduce((s, c) => s + Number(c.amountCollected || 0), 0);
+      const evening = dayCollections.filter((c) => c.shift === "Evening").reduce((s, c) => s + Number(c.amountCollected || 0), 0);
+      const total = dayCollections.reduce((s, c) => s + Number(c.amountCollected || 0), 0);
+      rows.push({ date: iso, day, morning, evening, total });
+    }
+    return rows;
+  }, [collections, masterMonth, daysInMasterMonth, caseById]); // eslint-disable-line
+  const masterTotals = masterRows.reduce((acc, r) => ({ morning: acc.morning + r.morning, evening: acc.evening + r.evening, total: acc.total + r.total }), { morning: 0, evening: 0, total: 0 });
+  const masterHasUnlinked = masterRows.some((r) => Math.abs(r.total - r.morning - r.evening) > 0.01);
 
   const netProfit = income ? income.netProfit : null;
   const outstanding = collections.reduce((a, c) => a + Number(c.balance || 0), 0);
@@ -2125,6 +2154,14 @@ function Dashboard({ settings, collections, referrals, expenses, doctorPays, cas
         <PeriodCard title={formatDate(yest)} summary={yestSummary} start={yest} end={yest} onDrill={openDrill} />
         <PeriodCard title={formatDate(twoDaysAgo)} summary={twoDaysAgoSummary} start={twoDaysAgo} end={twoDaysAgo} onDrill={openDrill} />
         <PeriodCard
+          title={formatDate(pickedDay)} summary={pickedDaySummary} start={pickedDay} end={pickedDay} onDrill={openDrill}
+          headerExtra={
+            <div className="week-picker no-print">
+              <input type="date" value={pickedDay} max={t} onChange={(e) => setPickedDay(e.target.value)} />
+            </div>
+          }
+        />
+        <PeriodCard
           title={`Week ${weekNum} — ${weekMonthLabel}`} summary={weekSummary} start={weekStart} end={weekEnd} onDrill={openDrill}
           headerExtra={
             <div className="week-picker no-print">
@@ -2209,6 +2246,39 @@ function Dashboard({ settings, collections, referrals, expenses, doctorPays, cas
           )}
         </div>
       )}
+
+      <div className="card">
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10, marginBottom: 4 }}>
+          <h2 style={{ margin: 0 }}>📅 Master Monthly Summary</h2>
+          <div className="no-print" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--primary-dark)" }}>{masterMonthLabel}</span>
+            <input type="month" value={masterMonth} onChange={(e) => setMasterMonth(e.target.value)} style={{ fontSize: 11.5, padding: "4px 6px", borderRadius: 6, border: "1px solid var(--border)" }} />
+          </div>
+        </div>
+        <p style={{ fontSize: 12, color: "var(--ink-soft)", marginTop: 0, marginBottom: 14 }}>Every day of {masterMonthLabel}, split into Morning and Evening via each collection's linked case. Click any amount for the exact records behind it, with export/print.</p>
+        <div style={{ maxHeight: 440, overflowY: "auto", border: "1px solid var(--border)", borderRadius: 8 }}>
+          <table style={{ marginTop: 0 }}>
+            <thead style={{ position: "sticky", top: 0, background: "#fff", zIndex: 1 }}><tr><th>Date</th><th className="num">Morning</th><th className="num">Evening</th><th className="num">Total</th></tr></thead>
+            <tbody>
+              {masterRows.map((r) => (
+                <tr key={r.date}>
+                  <td>{formatDate(r.date)}</td>
+                  <td className="num" style={{ cursor: r.morning > 0 ? "pointer" : "default", textDecoration: r.morning > 0 ? "underline" : "none", textDecorationStyle: "dotted", textDecorationColor: "var(--ink-soft)" }} onClick={() => r.morning > 0 && openDrill({ kind: "shift", shift: "Morning", start: r.date, end: r.date, label: formatDate(r.date) })}>{inr(r.morning)}</td>
+                  <td className="num" style={{ cursor: r.evening > 0 ? "pointer" : "default", textDecoration: r.evening > 0 ? "underline" : "none", textDecorationStyle: "dotted", textDecorationColor: "var(--ink-soft)" }} onClick={() => r.evening > 0 && openDrill({ kind: "shift", shift: "Evening", start: r.date, end: r.date, label: formatDate(r.date) })}>{inr(r.evening)}</td>
+                  <td className="num" style={{ fontWeight: 700, cursor: r.total > 0 ? "pointer" : "default", textDecoration: r.total > 0 ? "underline" : "none", textDecorationStyle: "dotted", textDecorationColor: "var(--ink-soft)" }} onClick={() => r.total > 0 && openDrill({ start: r.date, end: r.date, label: formatDate(r.date) })}>{inr(r.total)}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot><tr style={{ fontWeight: 700, borderTop: "2px solid var(--accent)" }}>
+              <td>Total — {masterMonthLabel}</td>
+              <td className="num">{inr(masterTotals.morning)}</td>
+              <td className="num">{inr(masterTotals.evening)}</td>
+              <td className="num">{inr(masterTotals.total)}</td>
+            </tr></tfoot>
+          </table>
+        </div>
+        {masterHasUnlinked && <p style={{ fontSize: 11.5, color: "var(--ink-soft)", marginTop: 8 }}>On some days, Morning + Evening doesn't add up to Total — the difference is from collections not linked to a case ("Unlinked" shift), same as the Collection chart below.</p>}
+      </div>
 
       <div className="section-header" style={{ textAlign: "center" }}>Trends</div>
       <div className="card">
