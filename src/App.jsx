@@ -2025,13 +2025,15 @@ function Dashboard({ settings, collections, referrals, expenses, doctorPays, cas
   const masterMonthLabel = new Date(`${masterMonth}-01T00:00:00`).toLocaleDateString("en-IN", { month: "long", year: "numeric" });
   const masterRows = useMemo(() => {
     const rows = [];
+    let cumulative = 0; // resets to 0 at the start of every month (day 1), by construction of this loop
     for (let day = 1; day <= daysInMasterMonth; day++) {
       const iso = `${masterMonth}-${String(day).padStart(2, "0")}`;
       const dayCollections = collections.filter((c) => c.date === iso).map(enrichCollection);
       const morning = dayCollections.filter((c) => c.shift === "Morning").reduce((s, c) => s + Number(c.amountCollected || 0), 0);
       const evening = dayCollections.filter((c) => c.shift === "Evening").reduce((s, c) => s + Number(c.amountCollected || 0), 0);
       const total = dayCollections.reduce((s, c) => s + Number(c.amountCollected || 0), 0);
-      rows.push({ date: iso, day, morning, evening, total });
+      cumulative += total;
+      rows.push({ date: iso, day, morning, evening, total, cumulative });
     }
     return rows;
   }, [collections, masterMonth, daysInMasterMonth, caseById]); // eslint-disable-line
@@ -2267,10 +2269,10 @@ function Dashboard({ settings, collections, referrals, expenses, doctorPays, cas
             <input type="month" value={masterMonth} onChange={(e) => setMasterMonth(e.target.value)} style={{ fontSize: 11.5, padding: "4px 6px", borderRadius: 6, border: "1px solid var(--border)" }} />
           </div>
         </div>
-        <p style={{ fontSize: 12, color: "var(--ink-soft)", marginTop: 0, marginBottom: 14 }}>Every day of {masterMonthLabel}, split into Morning and Evening via each collection's linked case. Click any amount for the exact records behind it, with export/print.</p>
+        <p style={{ fontSize: 12, color: "var(--ink-soft)", marginTop: 0, marginBottom: 14 }}>Every day of {masterMonthLabel}, split into Morning and Evening via each collection's linked case, plus a running Cumulative Total for the month. Click any amount for the exact records behind it, with export/print.</p>
         <div style={{ maxHeight: 440, overflowY: "auto", border: "1px solid var(--border)", borderRadius: 8 }}>
           <table style={{ marginTop: 0 }}>
-            <thead style={{ position: "sticky", top: 0, background: "#fff", zIndex: 1 }}><tr><th>Date</th><th className="num">Morning</th><th className="num">Evening</th><th className="num">Total</th></tr></thead>
+            <thead style={{ position: "sticky", top: 0, background: "#fff", zIndex: 1 }}><tr><th>Date</th><th className="num">Morning</th><th className="num">Evening</th><th className="num">Total</th><th className="num">Cumulative Total</th></tr></thead>
             <tbody>
               {masterRows.map((r) => (
                 <tr key={r.date}>
@@ -2278,6 +2280,7 @@ function Dashboard({ settings, collections, referrals, expenses, doctorPays, cas
                   <td className="num" style={{ cursor: r.morning > 0 ? "pointer" : "default", textDecoration: r.morning > 0 ? "underline" : "none", textDecorationStyle: "dotted", textDecorationColor: "var(--ink-soft)" }} onClick={() => r.morning > 0 && openDrill({ kind: "shift", shift: "Morning", start: r.date, end: r.date, label: formatDate(r.date) })}>{inr(r.morning)}</td>
                   <td className="num" style={{ cursor: r.evening > 0 ? "pointer" : "default", textDecoration: r.evening > 0 ? "underline" : "none", textDecorationStyle: "dotted", textDecorationColor: "var(--ink-soft)" }} onClick={() => r.evening > 0 && openDrill({ kind: "shift", shift: "Evening", start: r.date, end: r.date, label: formatDate(r.date) })}>{inr(r.evening)}</td>
                   <td className="num" style={{ fontWeight: 700, cursor: r.total > 0 ? "pointer" : "default", textDecoration: r.total > 0 ? "underline" : "none", textDecorationStyle: "dotted", textDecorationColor: "var(--ink-soft)" }} onClick={() => r.total > 0 && openDrill({ start: r.date, end: r.date, label: formatDate(r.date) })}>{inr(r.total)}</td>
+                  <td className="num" style={{ color: "var(--primary-dark)", cursor: r.cumulative > 0 ? "pointer" : "default", textDecoration: r.cumulative > 0 ? "underline" : "none", textDecorationStyle: "dotted", textDecorationColor: "var(--ink-soft)" }} onClick={() => r.cumulative > 0 && openDrill({ start: `${masterMonth}-01`, end: r.date, label: `${masterMonthLabel}, 1st through ${formatDate(r.date)}` })}>{inr(r.cumulative)}</td>
                 </tr>
               ))}
             </tbody>
@@ -2285,6 +2288,7 @@ function Dashboard({ settings, collections, referrals, expenses, doctorPays, cas
               <td>Total — {masterMonthLabel}</td>
               <td className="num">{inr(masterTotals.morning)}</td>
               <td className="num">{inr(masterTotals.evening)}</td>
+              <td className="num">{inr(masterTotals.total)}</td>
               <td className="num">{inr(masterTotals.total)}</td>
             </tr></tfoot>
           </table>
