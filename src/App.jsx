@@ -114,7 +114,11 @@ async function apiFetch(origin, token, path, { method = "GET", body, isForm = fa
   }
   let data = null;
   if (res.status !== 204) { try { data = await res.json(); } catch { data = null; } }
-  if (!res.ok) throw new Error((data && data.error) || `Request failed (${res.status})`);
+  if (!res.ok) {
+    const err = new Error((data && data.error) || `Request failed (${res.status})`);
+    err.status = res.status;
+    throw err;
+  }
   return data;
 }
 
@@ -251,6 +255,54 @@ function useRowHighlight(targetId) {
     return () => { cancelAnimationFrame(raf); clearTimeout(timer); };
   }, [highlightId]);
   return highlightId;
+}
+
+// Auto-logout after this many minutes of no mouse/keyboard/touch/scroll
+// activity anywhere on the page — previously, a session never expired on
+// its own no matter how long a device sat unattended while still logged
+// in, which is exactly the kind of gap that matters on a shared clinic
+// computer. Warns IDLE_WARNING_MINUTES before the actual logout, so
+// mid-task work isn't lost with zero notice — clicking "Stay logged in"
+// resets the clock without any server round-trip (the JWT's own 12h
+// expiry is a separate, independent mechanism).
+const IDLE_TIMEOUT_MINUTES = 15;
+const IDLE_WARNING_MINUTES = 1;
+function useIdleLogout(isActive, onTimeout) {
+  const [warning, setWarning] = useState(false);
+  const [secondsLeft, setSecondsLeft] = useState(IDLE_WARNING_MINUTES * 60);
+  const lastActivityRef = useRef(Date.now());
+
+  const resetActivity = useCallback(() => {
+    lastActivityRef.current = Date.now();
+    setWarning(false);
+    setSecondsLeft(IDLE_WARNING_MINUTES * 60);
+  }, []);
+
+  useEffect(() => {
+    if (!isActive) return;
+    resetActivity(); // start the clock fresh the moment this becomes active (e.g. right after login)
+    // capture:true so activity inside a nested scrollable container (which
+    // doesn't bubble a "scroll" event up to window) is still caught.
+    const events = ["mousemove", "mousedown", "keydown", "touchstart", "scroll", "wheel"];
+    events.forEach((ev) => window.addEventListener(ev, resetActivity, { capture: true, passive: true }));
+    return () => events.forEach((ev) => window.removeEventListener(ev, resetActivity, { capture: true }));
+  }, [isActive, resetActivity]);
+
+  useEffect(() => {
+    if (!isActive) return;
+    const interval = setInterval(() => {
+      const idleMs = Date.now() - lastActivityRef.current;
+      const idleMinutes = idleMs / 60000;
+      if (idleMinutes >= IDLE_TIMEOUT_MINUTES) onTimeout();
+      else if (idleMinutes >= IDLE_TIMEOUT_MINUTES - IDLE_WARNING_MINUTES) {
+        setWarning(true);
+        setSecondsLeft(Math.max(0, Math.round((IDLE_TIMEOUT_MINUTES * 60000 - idleMs) / 1000)));
+      }
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [isActive, onTimeout]);
+
+  return { warning, secondsLeft, stayLoggedIn: resetActivity };
 }
 
 function ExportRow({ onExcel }) {
@@ -1006,6 +1058,7 @@ export default function App() {
   const removePatientMaster = useCallback(async (id) => { await call(`/patient-master/${id}`, { method: "DELETE" }); setPatientsMaster((p) => p.filter((x) => x.id !== id)); }, [call]);
   const updateSettings = useCallback(async (body) => { const r = await call("/settings", { method: "PUT", body }); setSettings(mapSettings(r)); }, [call]);
   const updateAvatar = useCallback(async (imageUrl) => { const r = await call("/auth/me/avatar", { method: "PUT", body: { imageUrl } }); setSession((s) => ({ ...s, avatarUrl: r.avatarUrl })); }, [call]);
+  const idle = useIdleLogout(!!session, useCallback(() => setSession(null), []));
 
   if (!session) return <AuthScreen onLogin={setSession} origin={origin} setOrigin={setOrigin} />;
 
@@ -1245,6 +1298,16 @@ export default function App() {
             @page{margin:14mm;}
           }
         `}</style>
+
+        {idle.warning && (
+          <div className="no-print" style={{ position: "fixed", inset: 0, background: "rgba(20,37,36,.55)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+            <div className="card" style={{ maxWidth: 380, textAlign: "center" }}>
+              <h2 style={{ marginTop: 0 }}>⏳ Still there?</h2>
+              <p style={{ color: "var(--ink-soft)" }}>You've been idle for a while. For security, you'll be logged out in <strong>{idle.secondsLeft}s</strong>.</p>
+              <button className="btn" type="button" onClick={idle.stayLoggedIn}>Stay logged in</button>
+            </div>
+          </div>
+        )}
 
         <button className="mobile-nav-toggle no-print" onClick={() => setNavOpen((o) => !o)} title="Menu" type="button">☰</button>
         <div className={"nav-backdrop" + (navOpen ? " open" : "")} onClick={() => setNavOpen(false)} />
