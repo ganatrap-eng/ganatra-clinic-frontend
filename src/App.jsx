@@ -427,7 +427,7 @@ const mapGift = (r) => ({ id: r.id, date: d10(r.gift_date), repName: r.rep_name,
 const mapExpense = (r) => ({ id: r.id, date: d10(r.expense_date), category: r.category, amount: Number(r.amount), narration: r.narration, image: r.image_url, createdAt: r.created_at });
 const mapAsset = (r) => ({ id: r.id, name: r.name, block: r.block, rate: Number(r.rate), purchaseDate: d10(r.purchase_date), cost: Number(r.cost) });
 const mapCapital = (r) => ({ id: r.id, date: d10(r.txn_date), type: r.txn_type, amount: Number(r.amount), note: r.note });
-const mapSettings = (r) => ({ clinicName: r.clinic_name || "Your Clinic", proprietor: r.proprietor || "", address: r.address || "", phone: r.phone || "", email: r.email || "", timings: r.timings || "", partner1Name: r.partner1_name || "Partner 1", partner1Share: Number(r.partner1_share ?? 50), partner2Name: r.partner2_name || "Partner 2", partner2Share: Number(r.partner2_share ?? 50) });
+const mapSettings = (r) => ({ clinicName: r.clinic_name || "Your Clinic", proprietor: r.proprietor || "", address: r.address || "", phone: r.phone || "", email: r.email || "", timings: r.timings || "", partner1Name: r.partner1_name || "Partner 1", partner1Share: Number(r.partner1_share ?? 50), partner2Name: r.partner2_name || "Partner 2", partner2Share: Number(r.partner2_share ?? 50), headDoctorPartner: r.head_doctor_partner === "partner2" ? "partner2" : "partner1" });
 
 /* -------- Image capture: upload, rotate to align, attach via API -------- */
 /** Displays a user's avatar — fetched the same authenticated way as every
@@ -904,7 +904,7 @@ export default function App() {
   const clearPendingSearch = useCallback(() => setPendingSearch(null), []);
   const [fy, setFy] = useState(fyOf(todayISO()));
 
-  const [settings, setSettings] = useState({ clinicName: "Your Clinic", proprietor: "", address: "", phone: "", email: "", timings: "", partner1Name: "Partner 1", partner1Share: 50, partner2Name: "Partner 2", partner2Share: 50 });
+  const [settings, setSettings] = useState({ clinicName: "Your Clinic", proprietor: "", address: "", phone: "", email: "", timings: "", partner1Name: "Partner 1", partner1Share: 50, partner2Name: "Partner 2", partner2Share: 50, headDoctorPartner: "partner1" });
   const [doctors, setDoctors] = useState([]);
   const [cases, setCases] = useState([]);
   const [collections, setCollections] = useState([]);
@@ -1925,8 +1925,16 @@ function Dashboard({ settings, collections, referrals, expenses, doctorPays, cas
     call(`/statements/income?from=${distMonthStart}&to=${distMonthEnd}`).then(setDistIncome).catch((e) => setDistErr(e.message)).finally(() => setDistLoading(false));
   }, [call, distMonthStart, distMonthEnd]); // eslint-disable-line
   const distNetProfit = distIncome ? distIncome.netProfit : null;
-  const distP1Amount = distNetProfit !== null ? distNetProfit * (Number(settings.partner1Share) / 100) : null;
-  const distP2Amount = distNetProfit !== null ? distNetProfit * (Number(settings.partner2Share) / 100) : null;
+  // Referral + Gift income always belongs entirely to the Head Doctor —
+  // carved out of the distributable pool before splitting the remainder
+  // by the configured shares (see Settings → Profit distribution). The
+  // total each partner receives (base share + this bonus for the head
+  // doctor) still always sums to exactly distNetProfit — nothing is lost
+  // or double-counted, just reallocated.
+  const distHeadDoctorBonus = distIncome ? Number(distIncome.income.referral || 0) + Number(distIncome.income.gift || 0) : null;
+  const distSplittable = distNetProfit !== null && distHeadDoctorBonus !== null ? distNetProfit - distHeadDoctorBonus : null;
+  const distP1Amount = distSplittable !== null ? distSplittable * (Number(settings.partner1Share) / 100) + (settings.headDoctorPartner === "partner1" ? distHeadDoctorBonus : 0) : null;
+  const distP2Amount = distSplittable !== null ? distSplittable * (Number(settings.partner2Share) / 100) + (settings.headDoctorPartner === "partner2" ? distHeadDoctorBonus : 0) : null;
 
   // FY Profit Distribution — mirrors the monthly card above but for a whole
   // financial year, with its own independent FY picker (defaults to the
@@ -1944,8 +1952,10 @@ function Dashboard({ settings, collections, referrals, expenses, doctorPays, cas
     call(`/statements/income?fy=${distFY}`).then(setDistFYIncome).catch((e) => setDistFYErr(e.message)).finally(() => setDistFYLoading(false));
   }, [call, distFY]); // eslint-disable-line
   const distFYNetProfit = distFYIncome ? distFYIncome.netProfit : null;
-  const distFYP1Amount = distFYNetProfit !== null ? distFYNetProfit * (Number(settings.partner1Share) / 100) : null;
-  const distFYP2Amount = distFYNetProfit !== null ? distFYNetProfit * (Number(settings.partner2Share) / 100) : null;
+  const distFYHeadDoctorBonus = distFYIncome ? Number(distFYIncome.income.referral || 0) + Number(distFYIncome.income.gift || 0) : null;
+  const distFYSplittable = distFYNetProfit !== null && distFYHeadDoctorBonus !== null ? distFYNetProfit - distFYHeadDoctorBonus : null;
+  const distFYP1Amount = distFYSplittable !== null ? distFYSplittable * (Number(settings.partner1Share) / 100) + (settings.headDoctorPartner === "partner1" ? distFYHeadDoctorBonus : 0) : null;
+  const distFYP2Amount = distFYSplittable !== null ? distFYSplittable * (Number(settings.partner2Share) / 100) + (settings.headDoctorPartner === "partner2" ? distFYHeadDoctorBonus : 0) : null;
 
   // Month snapshot card — its own month/year filter, independent of "today".
   const [snapMonth, setSnapMonth] = useState(t.slice(0, 7)); // "YYYY-MM"
@@ -2201,8 +2211,8 @@ function Dashboard({ settings, collections, referrals, expenses, doctorPays, cas
               <table>
                 <thead><tr><th>Partner</th><th className="num">Share</th><th className="num">Amount</th></tr></thead>
                 <tbody>
-                  <tr><td>{settings.partner1Name}</td><td className="num">{settings.partner1Share}%</td><td className="num" style={{ color: distP1Amount >= 0 ? "var(--income)" : "var(--expense)" }}>{inr(distP1Amount)}</td></tr>
-                  <tr><td>{settings.partner2Name}</td><td className="num">{settings.partner2Share}%</td><td className="num" style={{ color: distP2Amount >= 0 ? "var(--income)" : "var(--expense)" }}>{inr(distP2Amount)}</td></tr>
+                  <tr><td>{settings.partner1Name}{settings.headDoctorPartner === "partner1" ? " (Head Doctor)" : ""}</td><td className="num">{settings.partner1Share}%{settings.headDoctorPartner === "partner1" ? " + Referral/Gift" : ""}</td><td className="num" style={{ color: distP1Amount >= 0 ? "var(--income)" : "var(--expense)" }}>{inr(distP1Amount)}</td></tr>
+                  <tr><td>{settings.partner2Name}{settings.headDoctorPartner === "partner2" ? " (Head Doctor)" : ""}</td><td className="num">{settings.partner2Share}%{settings.headDoctorPartner === "partner2" ? " + Referral/Gift" : ""}</td><td className="num" style={{ color: distP2Amount >= 0 ? "var(--income)" : "var(--expense)" }}>{inr(distP2Amount)}</td></tr>
                 </tbody>
                 <tfoot><tr style={{ fontWeight: 700, borderTop: "2px solid var(--accent)" }}>
                   <td colSpan={2}>{distNetProfit >= 0 ? "Total Net Profit" : "Total Net Loss"} ({distMonthLabel})</td>
@@ -2210,6 +2220,7 @@ function Dashboard({ settings, collections, referrals, expenses, doctorPays, cas
                 </tr></tfoot>
               </table>
               {distNetProfit < 0 && <p style={{ fontSize: 12, color: "var(--expense)", marginTop: 8 }}>This month ran at a loss — each partner's share above is a negative figure (their portion of the shortfall), not a payout.</p>}
+              {distHeadDoctorBonus > 0 && <p style={{ fontSize: 11.5, color: "var(--ink-soft)", marginTop: 10 }}>Includes {inr(distHeadDoctorBonus)} of Referral + Gift income for {distMonthLabel}, given entirely to {settings.headDoctorPartner === "partner1" ? settings.partner1Name : settings.partner2Name} — the remaining {inr(distSplittable)} is split by the shares above.</p>}
               <p style={{ fontSize: 11.5, color: "var(--ink-soft)", marginTop: 10 }}>Partner names and shares are set under Settings → Profit distribution. For the full breakdown behind this figure (income, category-wise expenses, depreciation), see Financial Statements.</p>
             </>
           )}
@@ -2232,8 +2243,8 @@ function Dashboard({ settings, collections, referrals, expenses, doctorPays, cas
               <table>
                 <thead><tr><th>Partner</th><th className="num">Share</th><th className="num">Amount</th></tr></thead>
                 <tbody>
-                  <tr><td>{settings.partner1Name}</td><td className="num">{settings.partner1Share}%</td><td className="num" style={{ color: distFYP1Amount >= 0 ? "var(--income)" : "var(--expense)" }}>{inr(distFYP1Amount)}</td></tr>
-                  <tr><td>{settings.partner2Name}</td><td className="num">{settings.partner2Share}%</td><td className="num" style={{ color: distFYP2Amount >= 0 ? "var(--income)" : "var(--expense)" }}>{inr(distFYP2Amount)}</td></tr>
+                  <tr><td>{settings.partner1Name}{settings.headDoctorPartner === "partner1" ? " (Head Doctor)" : ""}</td><td className="num">{settings.partner1Share}%{settings.headDoctorPartner === "partner1" ? " + Referral/Gift" : ""}</td><td className="num" style={{ color: distFYP1Amount >= 0 ? "var(--income)" : "var(--expense)" }}>{inr(distFYP1Amount)}</td></tr>
+                  <tr><td>{settings.partner2Name}{settings.headDoctorPartner === "partner2" ? " (Head Doctor)" : ""}</td><td className="num">{settings.partner2Share}%{settings.headDoctorPartner === "partner2" ? " + Referral/Gift" : ""}</td><td className="num" style={{ color: distFYP2Amount >= 0 ? "var(--income)" : "var(--expense)" }}>{inr(distFYP2Amount)}</td></tr>
                 </tbody>
                 <tfoot><tr style={{ fontWeight: 700, borderTop: "2px solid var(--accent)" }}>
                   <td colSpan={2}>{distFYNetProfit >= 0 ? "Total Net Profit" : "Total Net Loss"} (FY {distFY})</td>
@@ -2241,6 +2252,7 @@ function Dashboard({ settings, collections, referrals, expenses, doctorPays, cas
                 </tr></tfoot>
               </table>
               {distFYNetProfit < 0 && <p style={{ fontSize: 12, color: "var(--expense)", marginTop: 8 }}>This financial year ran at a loss — each partner's share above is a negative figure (their portion of the shortfall), not a payout.</p>}
+              {distFYHeadDoctorBonus > 0 && <p style={{ fontSize: 11.5, color: "var(--ink-soft)", marginTop: 10 }}>Includes {inr(distFYHeadDoctorBonus)} of Referral + Gift income for FY {distFY}, given entirely to {settings.headDoctorPartner === "partner1" ? settings.partner1Name : settings.partner2Name} — the remaining {inr(distFYSplittable)} is split by the shares above.</p>}
               <p style={{ fontSize: 11.5, color: "var(--ink-soft)", marginTop: 10 }}>Partner names and shares are set under Settings → Profit distribution.</p>
             </>
           )}
@@ -4004,6 +4016,16 @@ function SettingsPage({ settings, updateSettings, session, origin, capital, addC
             Shares currently add up to {(Number(form.partner1Share || 0) + Number(form.partner2Share || 0)).toFixed(2)}% — they must total exactly 100% before this can be saved.
           </div>
         )}
+        <div className="form-grid" style={{ maxWidth: 320, marginTop: 4 }}>
+          <div>
+            <label>Head Doctor (gets 100% of Referral + Gift income)</label>
+            <select value={form.headDoctorPartner} onChange={(e) => setForm({ ...form, headDoctorPartner: e.target.value })} disabled={!canEditSettings}>
+              <option value="partner1">{form.partner1Name || "Partner 1"}</option>
+              <option value="partner2">{form.partner2Name || "Partner 2"}</option>
+            </select>
+          </div>
+        </div>
+        <p style={{ fontSize: 11.5, color: "var(--ink-soft)", marginTop: 6 }}>Referral Income and Gifts Register income always belong entirely to the Head Doctor — they're carved out before the remaining profit is split by the shares above.</p>
         {canEditSettings ? <button className="btn" type="button" disabled={busy} onClick={save}>Save changes</button> : <div className="note-box">Only Admin or Doctor roles can edit the clinic profile.</div>}
       </div>
 
