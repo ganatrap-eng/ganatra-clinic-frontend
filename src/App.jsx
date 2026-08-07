@@ -383,17 +383,18 @@ function CustomExport({ rows, allRows, filters, dateField, buildSheets, filename
   const doPrint = () => {
     const win = document.getElementById("print-root");
     if (!win) { window.print(); return; }
-    const rowsHtml = rows.map((r) => `<tr>${printColumns.map((c) => `<td>${escapeHtml(c.value(r))}</td>`).join("")}</tr>`).join("");
+    const rowsHtml = rows.map((r) => `<tr>${printColumns.map((c) => `<td style="word-wrap:break-word;overflow-wrap:break-word;">${escapeHtml(c.value(r))}</td>`).join("")}</tr>`).join("");
+    if (printColumns.length > 6) win.classList.add("landscape-wide");
     win.innerHTML = `
       <h2>${escapeHtml(printTitle)}</h2>
       <p style="color:#5B6B69;font-size:12px;">${escapeHtml(filterSummary())} — ${rows.length} record(s)</p>
-      <table style="width:100%;border-collapse:collapse;font-size:12px;">
-        <thead><tr>${printColumns.map((c) => `<th style="text-align:left;border-bottom:2px solid #C9A227;padding:5px 6px;">${escapeHtml(c.label)}</th>`).join("")}</tr></thead>
+      <table style="width:100%;table-layout:fixed;border-collapse:collapse;font-size:${printColumns.length > 6 ? "10.5px" : "12px"};">
+        <thead><tr>${printColumns.map((c) => `<th style="text-align:left;border-bottom:2px solid #C9A227;padding:4px 5px;word-wrap:break-word;">${escapeHtml(c.label)}</th>`).join("")}</tr></thead>
         <tbody>${rowsHtml}</tbody>
       </table>`;
     document.body.classList.add("printing-custom");
     window.print();
-    setTimeout(() => { document.body.classList.remove("printing-custom"); win.innerHTML = ""; }, 300);
+    setTimeout(() => { document.body.classList.remove("printing-custom"); win.classList.remove("landscape-wide"); win.innerHTML = ""; }, 300);
   };
 
   return (
@@ -1296,6 +1297,8 @@ export default function App() {
             body.printing-custom .content > *{display:none !important;}
             body.printing-custom .print-root{display:block !important;}
             @page{margin:14mm;}
+            @page wide{size:landscape;margin:10mm;}
+            .print-root.landscape-wide{page:wide;}
           }
         `}</style>
 
@@ -1495,17 +1498,18 @@ function DrillDownPanel({ drill, onClose }) {
   const doPrint = () => {
     const win = document.getElementById("print-root");
     if (!win) { window.print(); return; }
-    const rowsHtml = drill.rows.map((r) => `<tr>${columns.map((c) => `<td>${escapeHtml(c.value(r))}</td>`).join("")}</tr>`).join("");
+    const rowsHtml = drill.rows.map((r) => `<tr>${columns.map((c) => `<td style="word-wrap:break-word;overflow-wrap:break-word;">${escapeHtml(c.value(r))}</td>`).join("")}</tr>`).join("");
+    win.classList.add("landscape-wide");
     win.innerHTML = `
       <h2>${escapeHtml(drill.title)}</h2>
       <p style="color:#5B6B69;font-size:12px;">${drill.rows.length} record(s) — total ${inr(total)}${totalLabel}</p>
-      <table style="width:100%;border-collapse:collapse;font-size:12px;">
-        <thead><tr>${columns.map((c) => `<th style="text-align:left;border-bottom:2px solid #C9A227;padding:5px 6px;">${escapeHtml(c.label)}</th>`).join("")}</tr></thead>
+      <table style="width:100%;table-layout:fixed;border-collapse:collapse;font-size:10.5px;">
+        <thead><tr>${columns.map((c) => `<th style="text-align:left;border-bottom:2px solid #C9A227;padding:4px 5px;word-wrap:break-word;">${escapeHtml(c.label)}</th>`).join("")}</tr></thead>
         <tbody>${rowsHtml}</tbody>
       </table>`;
     document.body.classList.add("printing-custom");
     window.print();
-    setTimeout(() => { document.body.classList.remove("printing-custom"); win.innerHTML = ""; }, 300);
+    setTimeout(() => { document.body.classList.remove("printing-custom"); win.classList.remove("landscape-wide"); win.innerHTML = ""; }, 300);
   };
 
   return (
@@ -1570,8 +1574,8 @@ function ShiftCollectionChart({ collections, cases, fy }) {
     win.innerHTML = `
       <h2>Morning vs Evening Collection</h2>
       <p style="color:#5B6B69;font-size:12px;">${from} to ${to} — Morning ${inr(totals.Morning)}, Evening ${inr(totals.Evening)}, Unlinked ${inr(totals.Unlinked)}</p>
-      <table style="width:100%;border-collapse:collapse;font-size:12px;">
-        <thead><tr><th style="text-align:left;border-bottom:2px solid #C9A227;padding:5px 6px;">Date</th><th style="text-align:left;border-bottom:2px solid #C9A227;padding:5px 6px;">Morning</th><th style="text-align:left;border-bottom:2px solid #C9A227;padding:5px 6px;">Evening</th><th style="text-align:left;border-bottom:2px solid #C9A227;padding:5px 6px;">Unlinked</th><th style="text-align:left;border-bottom:2px solid #C9A227;padding:5px 6px;">Total</th></tr></thead>
+      <table style="width:100%;table-layout:fixed;border-collapse:collapse;font-size:12px;">
+        <thead><tr><th style="text-align:left;border-bottom:2px solid #C9A227;padding:5px 6px;word-wrap:break-word;">Date</th><th style="text-align:left;border-bottom:2px solid #C9A227;padding:5px 6px;word-wrap:break-word;">Morning</th><th style="text-align:left;border-bottom:2px solid #C9A227;padding:5px 6px;word-wrap:break-word;">Evening</th><th style="text-align:left;border-bottom:2px solid #C9A227;padding:5px 6px;word-wrap:break-word;">Unlinked</th><th style="text-align:left;border-bottom:2px solid #C9A227;padding:5px 6px;word-wrap:break-word;">Total</th></tr></thead>
         <tbody>${rowsHtml}</tbody>
       </table>`;
     document.body.classList.add("printing-custom");
@@ -2837,12 +2841,12 @@ function PatientMaster({ can, patients, addPatient, updatePatient, removePatient
   const doPrint = () => {
     const win = document.getElementById("print-root");
     if (!win) { window.print(); return; }
-    const rowsHtml = sorted.map((p) => `<tr><td>${escapeHtml(p.name)}</td><td>${escapeHtml(p.mobile)}</td><td>${escapeHtml(p.gender)}</td><td>${p.dob}</td><td>${escapeHtml(exactAge(p.dob))}</td><td>${escapeHtml(p.address)}</td></tr>`).join("");
+    const rowsHtml = sorted.map((p) => `<tr><td style="word-wrap:break-word;">${escapeHtml(p.name)}</td><td style="word-wrap:break-word;">${escapeHtml(p.mobile)}</td><td style="word-wrap:break-word;">${escapeHtml(p.gender)}</td><td style="word-wrap:break-word;">${p.dob}</td><td style="word-wrap:break-word;">${escapeHtml(exactAge(p.dob))}</td><td style="word-wrap:break-word;">${escapeHtml(p.address)}</td></tr>`).join("");
     win.innerHTML = `
       <h2>Patient Master</h2>
       <p style="color:#5B6B69;font-size:12px;">${sorted.length} patient(s)${query ? ` — filtered by "${escapeHtml(query)}"` : ""}</p>
-      <table style="width:100%;border-collapse:collapse;font-size:12px;">
-        <thead><tr><th style="text-align:left;border-bottom:2px solid #C9A227;padding:5px 6px;">Name</th><th style="text-align:left;border-bottom:2px solid #C9A227;padding:5px 6px;">Mobile</th><th style="text-align:left;border-bottom:2px solid #C9A227;padding:5px 6px;">Gender</th><th style="text-align:left;border-bottom:2px solid #C9A227;padding:5px 6px;">DOB</th><th style="text-align:left;border-bottom:2px solid #C9A227;padding:5px 6px;">Age</th><th style="text-align:left;border-bottom:2px solid #C9A227;padding:5px 6px;">Address</th></tr></thead>
+      <table style="width:100%;table-layout:fixed;border-collapse:collapse;font-size:11px;">
+        <thead><tr><th style="text-align:left;border-bottom:2px solid #C9A227;padding:4px 5px;word-wrap:break-word;">Name</th><th style="text-align:left;border-bottom:2px solid #C9A227;padding:4px 5px;word-wrap:break-word;">Mobile</th><th style="text-align:left;border-bottom:2px solid #C9A227;padding:4px 5px;word-wrap:break-word;">Gender</th><th style="text-align:left;border-bottom:2px solid #C9A227;padding:4px 5px;word-wrap:break-word;">DOB</th><th style="text-align:left;border-bottom:2px solid #C9A227;padding:4px 5px;word-wrap:break-word;">Age</th><th style="text-align:left;border-bottom:2px solid #C9A227;padding:4px 5px;word-wrap:break-word;">Address</th></tr></thead>
         <tbody>${rowsHtml}</tbody>
       </table>`;
     document.body.classList.add("printing-custom");
@@ -3051,19 +3055,19 @@ function PatientHistory({ can, updateCase, updateCollection, cases, doctors, set
     if (!data) return;
     const win = document.getElementById("print-root");
     if (!win) { window.print(); return; }
-    const visitRows = data.cases.map((c) => `<tr><td>${escapeHtml(c.case_no)}</td><td>${d10(c.case_date)}</td><td>${escapeHtml(c.doctor_name || "")}</td><td>${escapeHtml(c.brief_history || "")}</td></tr>`).join("");
-    const payRows = data.collections.map((c) => `<tr><td>${d10(c.collection_date)}</td><td>${escapeHtml(c.case_no || "")}</td><td>${inr(c.amount_due)}</td><td>${inr(c.amount_collected)}</td><td>${inr(c.balance)}</td></tr>`).join("");
+    const visitRows = data.cases.map((c) => `<tr><td style="word-wrap:break-word;">${escapeHtml(c.case_no)}</td><td style="word-wrap:break-word;">${d10(c.case_date)}</td><td style="word-wrap:break-word;">${escapeHtml(c.doctor_name || "")}</td><td style="word-wrap:break-word;">${escapeHtml(c.brief_history || "")}</td></tr>`).join("");
+    const payRows = data.collections.map((c) => `<tr><td style="word-wrap:break-word;">${d10(c.collection_date)}</td><td style="word-wrap:break-word;">${escapeHtml(c.case_no || "")}</td><td style="word-wrap:break-word;">${inr(c.amount_due)}</td><td style="word-wrap:break-word;">${inr(c.amount_collected)}</td><td style="word-wrap:break-word;">${inr(c.balance)}</td></tr>`).join("");
     win.innerHTML = `
       <h2>Patient History — ${escapeHtml(data.patient.name)}${data.patient.phone ? " (" + escapeHtml(data.patient.phone) + ")" : ""}</h2>
       <p style="color:#5B6B69;font-size:12px;">${escapeHtml(from || "start")} to ${escapeHtml(to || "today")}</p>
       <h3 style="margin-top:16px;">Visit History</h3>
-      <table style="width:100%;border-collapse:collapse;font-size:12px;">
-        <thead><tr><th style="text-align:left;border-bottom:2px solid #C9A227;padding:5px;">Case No.</th><th style="text-align:left;border-bottom:2px solid #C9A227;padding:5px;">Date</th><th style="text-align:left;border-bottom:2px solid #C9A227;padding:5px;">Doctor</th><th style="text-align:left;border-bottom:2px solid #C9A227;padding:5px;">History</th></tr></thead>
+      <table style="width:100%;table-layout:fixed;border-collapse:collapse;font-size:11px;">
+        <thead><tr><th style="text-align:left;border-bottom:2px solid #C9A227;padding:4px;word-wrap:break-word;">Case No.</th><th style="text-align:left;border-bottom:2px solid #C9A227;padding:4px;word-wrap:break-word;">Date</th><th style="text-align:left;border-bottom:2px solid #C9A227;padding:4px;word-wrap:break-word;">Doctor</th><th style="text-align:left;border-bottom:2px solid #C9A227;padding:4px;word-wrap:break-word;">History</th></tr></thead>
         <tbody>${visitRows || "<tr><td colspan=4>No visits</td></tr>"}</tbody>
       </table>
       <h3 style="margin-top:16px;">Payment History</h3>
-      <table style="width:100%;border-collapse:collapse;font-size:12px;">
-        <thead><tr><th style="text-align:left;border-bottom:2px solid #C9A227;padding:5px;">Date</th><th style="text-align:left;border-bottom:2px solid #C9A227;padding:5px;">Case No.</th><th style="text-align:right;border-bottom:2px solid #C9A227;padding:5px;">Due</th><th style="text-align:right;border-bottom:2px solid #C9A227;padding:5px;">Collected</th><th style="text-align:right;border-bottom:2px solid #C9A227;padding:5px;">Balance</th></tr></thead>
+      <table style="width:100%;table-layout:fixed;border-collapse:collapse;font-size:11px;">
+        <thead><tr><th style="text-align:left;border-bottom:2px solid #C9A227;padding:4px;word-wrap:break-word;">Date</th><th style="text-align:left;border-bottom:2px solid #C9A227;padding:4px;word-wrap:break-word;">Case No.</th><th style="text-align:right;border-bottom:2px solid #C9A227;padding:4px;word-wrap:break-word;">Due</th><th style="text-align:right;border-bottom:2px solid #C9A227;padding:4px;word-wrap:break-word;">Collected</th><th style="text-align:right;border-bottom:2px solid #C9A227;padding:4px;word-wrap:break-word;">Balance</th></tr></thead>
         <tbody>${payRows || "<tr><td colspan=5>No payments</td></tr>"}</tbody>
       </table>`;
     document.body.classList.add("printing-custom");
