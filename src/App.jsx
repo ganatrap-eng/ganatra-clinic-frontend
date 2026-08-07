@@ -384,7 +384,6 @@ function CustomExport({ rows, allRows, filters, dateField, buildSheets, filename
     const win = document.getElementById("print-root");
     if (!win) { window.print(); return; }
     const rowsHtml = rows.map((r) => `<tr>${printColumns.map((c) => `<td style="word-wrap:break-word;overflow-wrap:break-word;">${escapeHtml(c.value(r))}</td>`).join("")}</tr>`).join("");
-    if (printColumns.length > 6) win.classList.add("landscape-wide");
     win.innerHTML = `
       <h2>${escapeHtml(printTitle)}</h2>
       <p style="color:#5B6B69;font-size:12px;">${escapeHtml(filterSummary())} — ${rows.length} record(s)</p>
@@ -394,7 +393,7 @@ function CustomExport({ rows, allRows, filters, dateField, buildSheets, filename
       </table>`;
     document.body.classList.add("printing-custom");
     window.print();
-    setTimeout(() => { document.body.classList.remove("printing-custom"); win.classList.remove("landscape-wide"); win.innerHTML = ""; }, 300);
+    setTimeout(() => { document.body.classList.remove("printing-custom"); win.innerHTML = ""; }, 300);
   };
 
   return (
@@ -1297,8 +1296,6 @@ export default function App() {
             body.printing-custom .content > *{display:none !important;}
             body.printing-custom .print-root{display:block !important;}
             @page{margin:14mm;}
-            @page wide{size:landscape;margin:10mm;}
-            .print-root.landscape-wide{page:wide;}
           }
         `}</style>
 
@@ -1499,7 +1496,6 @@ function DrillDownPanel({ drill, onClose }) {
     const win = document.getElementById("print-root");
     if (!win) { window.print(); return; }
     const rowsHtml = drill.rows.map((r) => `<tr>${columns.map((c) => `<td style="word-wrap:break-word;overflow-wrap:break-word;">${escapeHtml(c.value(r))}</td>`).join("")}</tr>`).join("");
-    win.classList.add("landscape-wide");
     win.innerHTML = `
       <h2>${escapeHtml(drill.title)}</h2>
       <p style="color:#5B6B69;font-size:12px;">${drill.rows.length} record(s) — total ${inr(total)}${totalLabel}</p>
@@ -1509,7 +1505,7 @@ function DrillDownPanel({ drill, onClose }) {
       </table>`;
     document.body.classList.add("printing-custom");
     window.print();
-    setTimeout(() => { document.body.classList.remove("printing-custom"); win.classList.remove("landscape-wide"); win.innerHTML = ""; }, 300);
+    setTimeout(() => { document.body.classList.remove("printing-custom"); win.innerHTML = ""; }, 300);
   };
 
   return (
