@@ -137,6 +137,16 @@ function exportExcel(filename, sheetsObj) {
   });
   XLSX.writeFile(wb, `${filename}.xlsx`);
 }
+/** Turns a report's own title into a safe, readable filename, and is used
+ *  to briefly set document.title right before calling window.print() —
+ *  most browsers suggest the page's current title as the default filename
+ *  when someone saves a print job as PDF. Without this, every single
+ *  report's PDF suggested the same static app name ("Clinic ERP —
+ *  Practice & Accounts Manager") regardless of which report was actually
+ *  being printed, since the page title never changed per-report. */
+function sanitizeFilename(str) {
+  return String(str || "Report").replace(/[\\/:*?"<>|]/g, "").replace(/\s+/g, " ").trim().replace(/ /g, "-").replace(/-{2,}/g, "-");
+}
 /** Escapes text before it's inserted into a print view's innerHTML — without
  *  this, a patient name or note containing "<" or "&" could be interpreted
  *  as HTML/script rather than displayed as plain text. */
@@ -391,9 +401,11 @@ function CustomExport({ rows, allRows, filters, dateField, buildSheets, filename
         <thead><tr>${printColumns.map((c) => `<th style="text-align:left;border-bottom:2px solid #C9A227;padding:4px 5px;word-wrap:break-word;">${escapeHtml(c.label)}</th>`).join("")}</tr></thead>
         <tbody>${rowsHtml}</tbody>
       </table>`;
+    const prevTitle = document.title;
+    document.title = sanitizeFilename(printTitle);
     document.body.classList.add("printing-custom");
     window.print();
-    setTimeout(() => { document.body.classList.remove("printing-custom"); win.innerHTML = ""; }, 300);
+    setTimeout(() => { document.body.classList.remove("printing-custom"); win.innerHTML = ""; document.title = prevTitle; }, 300);
   };
 
   return (
@@ -1503,9 +1515,11 @@ function DrillDownPanel({ drill, onClose }) {
         <thead><tr>${columns.map((c) => `<th style="text-align:left;border-bottom:2px solid #C9A227;padding:4px 5px;word-wrap:break-word;">${escapeHtml(c.label)}</th>`).join("")}</tr></thead>
         <tbody>${rowsHtml}</tbody>
       </table>`;
+    const prevTitle = document.title;
+    document.title = sanitizeFilename(drill.title);
     document.body.classList.add("printing-custom");
     window.print();
-    setTimeout(() => { document.body.classList.remove("printing-custom"); win.innerHTML = ""; }, 300);
+    setTimeout(() => { document.body.classList.remove("printing-custom"); win.innerHTML = ""; document.title = prevTitle; }, 300);
   };
 
   return (
@@ -1574,9 +1588,11 @@ function ShiftCollectionChart({ collections, cases, fy }) {
         <thead><tr><th style="text-align:left;border-bottom:2px solid #C9A227;padding:5px 6px;word-wrap:break-word;">Date</th><th style="text-align:left;border-bottom:2px solid #C9A227;padding:5px 6px;word-wrap:break-word;">Morning</th><th style="text-align:left;border-bottom:2px solid #C9A227;padding:5px 6px;word-wrap:break-word;">Evening</th><th style="text-align:left;border-bottom:2px solid #C9A227;padding:5px 6px;word-wrap:break-word;">Unlinked</th><th style="text-align:left;border-bottom:2px solid #C9A227;padding:5px 6px;word-wrap:break-word;">Total</th></tr></thead>
         <tbody>${rowsHtml}</tbody>
       </table>`;
+    const prevTitle = document.title;
+    document.title = sanitizeFilename(`Morning vs Evening Collection ${from} to ${to}`);
     document.body.classList.add("printing-custom");
     window.print();
-    setTimeout(() => { document.body.classList.remove("printing-custom"); win.innerHTML = ""; }, 300);
+    setTimeout(() => { document.body.classList.remove("printing-custom"); win.innerHTML = ""; document.title = prevTitle; }, 300);
   };
 
   return (
@@ -2102,6 +2118,30 @@ function Dashboard({ settings, collections, referrals, expenses, doctorPays, cas
   }, [collections, masterMonth, daysInMasterMonth, caseById]); // eslint-disable-line
   const masterTotals = masterRows.reduce((acc, r) => ({ morning: acc.morning + r.morning, evening: acc.evening + r.evening, total: acc.total + r.total }), { morning: 0, evening: 0, total: 0 });
   const masterHasUnlinked = masterRows.some((r) => Math.abs(r.total - r.morning - r.evening) > 0.01);
+  const masterDoExcel = () => exportExcel(`master-monthly-summary-${masterMonth}`, {
+    [masterMonthLabel]: [
+      ...masterRows.map((r) => ({ Date: formatDate(r.date), Morning: r.morning, Evening: r.evening, Total: r.total, "Cumulative Total": r.cumulative })),
+      { Date: `Total — ${masterMonthLabel}`, Morning: masterTotals.morning, Evening: masterTotals.evening, Total: masterTotals.total, "Cumulative Total": masterTotals.total },
+    ],
+  });
+  const masterDoPrint = () => {
+    const win = document.getElementById("print-root");
+    if (!win) { window.print(); return; }
+    const rowsHtml = masterRows.map((r) => `<tr><td>${formatDate(r.date)}</td><td>${inr(r.morning)}</td><td>${inr(r.evening)}</td><td>${inr(r.total)}</td><td>${inr(r.cumulative)}</td></tr>`).join("");
+    win.innerHTML = `
+      <h2>Master Monthly Summary — ${escapeHtml(masterMonthLabel)}</h2>
+      <p style="color:#5B6B69;font-size:12px;">Every day of ${escapeHtml(masterMonthLabel)}, split into Morning and Evening via each collection's linked case.</p>
+      <table style="width:100%;table-layout:fixed;border-collapse:collapse;font-size:11px;">
+        <thead><tr><th style="text-align:left;border-bottom:2px solid #C9A227;padding:4px 5px;word-wrap:break-word;">Date</th><th style="text-align:left;border-bottom:2px solid #C9A227;padding:4px 5px;word-wrap:break-word;">Morning</th><th style="text-align:left;border-bottom:2px solid #C9A227;padding:4px 5px;word-wrap:break-word;">Evening</th><th style="text-align:left;border-bottom:2px solid #C9A227;padding:4px 5px;word-wrap:break-word;">Total</th><th style="text-align:left;border-bottom:2px solid #C9A227;padding:4px 5px;word-wrap:break-word;">Cumulative Total</th></tr></thead>
+        <tbody>${rowsHtml}</tbody>
+        <tfoot><tr style="font-weight:700;border-top:2px solid #C9A227;"><td>Total — ${escapeHtml(masterMonthLabel)}</td><td>${inr(masterTotals.morning)}</td><td>${inr(masterTotals.evening)}</td><td>${inr(masterTotals.total)}</td><td>${inr(masterTotals.total)}</td></tr></tfoot>
+      </table>`;
+    const prevTitle = document.title;
+    document.title = sanitizeFilename(`Master Monthly Summary - ${masterMonthLabel}`);
+    document.body.classList.add("printing-custom");
+    window.print();
+    setTimeout(() => { document.body.classList.remove("printing-custom"); win.innerHTML = ""; document.title = prevTitle; }, 300);
+  };
 
   const netProfit = income ? income.netProfit : null;
   const outstanding = collections.reduce((a, c) => a + Number(c.balance || 0), 0);
@@ -2330,6 +2370,8 @@ function Dashboard({ settings, collections, referrals, expenses, doctorPays, cas
           <div className="no-print" style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--primary-dark)" }}>{masterMonthLabel}</span>
             <input type="month" value={masterMonth} onChange={(e) => setMasterMonth(e.target.value)} style={{ fontSize: 11.5, padding: "4px 6px", borderRadius: 6, border: "1px solid var(--border)" }} />
+            <button className="btn secondary small" type="button" onClick={masterDoExcel}>⬇ Export Excel</button>
+            <button className="btn secondary small" type="button" onClick={masterDoPrint}>⎙ Export PDF</button>
           </div>
         </div>
         <p style={{ fontSize: 12, color: "var(--ink-soft)", marginTop: 0, marginBottom: 14 }}>Every day of {masterMonthLabel}, split into Morning and Evening via each collection's linked case, plus a running Cumulative Total for the month. Click any amount for the exact records behind it, with export/print.</p>
@@ -2845,9 +2887,11 @@ function PatientMaster({ can, patients, addPatient, updatePatient, removePatient
         <thead><tr><th style="text-align:left;border-bottom:2px solid #C9A227;padding:4px 5px;word-wrap:break-word;">Name</th><th style="text-align:left;border-bottom:2px solid #C9A227;padding:4px 5px;word-wrap:break-word;">Mobile</th><th style="text-align:left;border-bottom:2px solid #C9A227;padding:4px 5px;word-wrap:break-word;">Gender</th><th style="text-align:left;border-bottom:2px solid #C9A227;padding:4px 5px;word-wrap:break-word;">DOB</th><th style="text-align:left;border-bottom:2px solid #C9A227;padding:4px 5px;word-wrap:break-word;">Age</th><th style="text-align:left;border-bottom:2px solid #C9A227;padding:4px 5px;word-wrap:break-word;">Address</th></tr></thead>
         <tbody>${rowsHtml}</tbody>
       </table>`;
+    const prevTitle = document.title;
+    document.title = sanitizeFilename("Patient Master");
     document.body.classList.add("printing-custom");
     window.print();
-    setTimeout(() => { document.body.classList.remove("printing-custom"); win.innerHTML = ""; }, 300);
+    setTimeout(() => { document.body.classList.remove("printing-custom"); win.innerHTML = ""; document.title = prevTitle; }, 300);
   };
 
   return (
@@ -3066,9 +3110,11 @@ function PatientHistory({ can, updateCase, updateCollection, cases, doctors, set
         <thead><tr><th style="text-align:left;border-bottom:2px solid #C9A227;padding:4px;word-wrap:break-word;">Date</th><th style="text-align:left;border-bottom:2px solid #C9A227;padding:4px;word-wrap:break-word;">Case No.</th><th style="text-align:right;border-bottom:2px solid #C9A227;padding:4px;word-wrap:break-word;">Due</th><th style="text-align:right;border-bottom:2px solid #C9A227;padding:4px;word-wrap:break-word;">Collected</th><th style="text-align:right;border-bottom:2px solid #C9A227;padding:4px;word-wrap:break-word;">Balance</th></tr></thead>
         <tbody>${payRows || "<tr><td colspan=5>No payments</td></tr>"}</tbody>
       </table>`;
+    const prevTitle = document.title;
+    document.title = sanitizeFilename(`Patient History - ${data.patient.name}`);
     document.body.classList.add("printing-custom");
     window.print();
-    setTimeout(() => { document.body.classList.remove("printing-custom"); win.innerHTML = ""; }, 300);
+    setTimeout(() => { document.body.classList.remove("printing-custom"); win.innerHTML = ""; document.title = prevTitle; }, 300);
   };
 
   return (
